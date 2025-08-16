@@ -3,22 +3,23 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Users can read and write their own profile data.
     match /users/{userId} {
-      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Rules for conversations and messages
+    match /conversations/{conversationId} {
+      // Allow users to read/write a conversation document if they are a participant
+      allow read, write: if request.auth != null && request.auth.uid in resource.data.participants;
+
+      // Allow participants to read and create messages within a conversation
+      match /messages/{messageId} {
+        allow read, create: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+      }
     }
   }
 }
 
-service firebase.storage {
-  match /b/{bucket}/o {
-    match /profile_pictures/{userId} {
-      allow read;
-      allow write: if request.auth != null && request.auth.uid == userId;
-    }
-    match /backgrounds/{userId} {
-      allow read;
-      allow write: if request.auth != null && request.auth.uid == userId;
-    }
-  }
-}
+    

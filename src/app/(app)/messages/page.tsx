@@ -1,37 +1,99 @@
-import { Card, CardContent } from "@/components/ui/card";
+
+"use client";
+
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Bold, Italic, Send, Search } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { useEffect, useState, useRef } from "react";
+import { auth, db } from "@/lib/firebase";
+import { onAuthStateChanged, User } from "firebase/auth";
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp, orderBy, doc, getDoc, setDoc, getDocs } from "firebase/firestore";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 
-function ConversationList() {
-    const conversations = [
-        { name: 'Alice Johnson', message: 'Sounds great, let me review it.', avatar: 'https://placehold.co/100x100.png', initial: 'AJ' },
-        { name: 'Bob Williams', message: 'Can you send over the latest draft?', avatar: 'https://placehold.co/100x100.png', initial: 'BW', active: true },
-        { name: 'Charlie Brown', message: 'I\'ve uploaded the new designs.', avatar: 'https://placehold.co/100x100.png', initial: 'CB' },
-        { name: 'Diana Miller', message: 'Let\'s sync up tomorrow morning.', avatar: 'https://placehold.co/100x100.png', initial: 'DM' },
-    ];
+
+interface Conversation {
+    id: string;
+    participants: string[];
+    lastMessage: string;
+    timestamp: any;
+    otherUser: {
+        uid: string;
+        displayName: string;
+        photoURL: string;
+    }
+}
+
+function ConversationList({ onSelectConversation, activeConversationId }: { onSelectConversation: (id: string, otherUser: any) => void, activeConversationId: string | null }) {
+    const [conversations, setConversations] = useState<Conversation[]>([]);
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, user => {
+            setCurrentUser(user);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    useEffect(() => {
+        if (!currentUser) return;
+
+        const q = query(collection(db, "conversations"), where("participants", "array-contains", currentUser.uid));
+
+        const unsubscribe = onSnapshot(q, async (querySnapshot) => {
+            const convs: Conversation[] = [];
+            for (const docSnap of querySnapshot.docs) {
+                const data = docSnap.data();
+                const otherUserId = data.participants.find((p: string) => p !== currentUser.uid);
+
+                if (otherUserId) {
+                    const userDoc = await getDoc(doc(db, "users", otherUserId));
+                    if (userDoc.exists()) {
+                        const userData = userDoc.data();
+                        convs.push({
+                            id: docSnap.id,
+                            ...data,
+                            otherUser: {
+                                uid: otherUserId,
+                                displayName: userData.displayName,
+                                photoURL: userData.photoURL,
+                            }
+                        } as Conversation);
+                    }
+                }
+            }
+            setConversations(convs.sort((a,b) => b.timestamp - a.timestamp));
+        });
+
+        return () => unsubscribe();
+    }, [currentUser]);
+
+    if (!currentUser) return null;
 
     return (
         <Card className="h-full">
-            <CardContent className="p-0">
-                <div className="p-4 border-b">
-                    <div className="relative">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input placeholder="Search messages" className="pl-8" />
-                    </div>
+            <CardHeader className="p-4 border-b">
+                <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="Search messages" className="pl-8" />
                 </div>
+            </CardHeader>
+            <CardContent className="p-0">
                 <div className="flex-1 overflow-auto">
                     {conversations.map(c => (
-                        <div key={c.name} className={`flex items-center gap-3 p-4 cursor-pointer hover:bg-muted/50 ${c.active ? 'bg-muted' : ''}`}>
+                        <div key={c.id}
+                             onClick={() => onSelectConversation(c.id, c.otherUser)}
+                             className={`flex items-center gap-3 p-4 cursor-pointer hover:bg-muted/50 ${activeConversationId === c.id ? 'bg-muted' : ''}`}>
                             <Avatar>
-                                <AvatarImage src={c.avatar} data-ai-hint="person"/>
-                                <AvatarFallback>{c.initial}</AvatarFallback>
+                                <AvatarImage src={c.otherUser.photoURL || 'https://placehold.co/100x100.png'} data-ai-hint="person"/>
+                                <AvatarFallback>{c.otherUser.displayName?.charAt(0) || 'U'}</AvatarFallback>
                             </Avatar>
                             <div className="flex-1">
-                                <p className="font-semibold">{c.name}</p>
-                                <p className="text-sm text-muted-foreground truncate">{c.message}</p>
+                                <p className="font-semibold">{c.otherUser.displayName}</p>
+                                <p className="text-sm text-muted-foreground truncate">{c.lastMessage}</p>
                             </div>
                         </div>
                     ))}
@@ -41,78 +103,216 @@ function ConversationList() {
     );
 }
 
-function ChatInterface() {
+interface Message {
+    id: string;
+    senderId: string;
+    text: string;
+    timestamp: any;
+}
+
+function ChatInterface({ conversationId, otherUser, currentUser }: { conversationId: string | null, otherUser: any | null, currentUser: User | null }) {
+    const [messages, setMessages] = useState<Message[]>([]);
+    const [newMessage, setNewMessage] = useState("");
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+        }
+    }, [messages]);
+    
+    useEffect(() => {
+        if (!conversationId) return;
+
+        const q = query(collection(db, "conversations", conversationId, "messages"), orderBy("timestamp", "asc"));
+
+        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+            const msgs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
+            setMessages(msgs);
+        });
+
+        return () => unsubscribe();
+    }, [conversationId]);
+
+
+    const handleSendMessage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newMessage.trim() || !currentUser || !conversationId) return;
+
+        const messageData = {
+            text: newMessage,
+            senderId: currentUser.uid,
+            timestamp: serverTimestamp()
+        };
+
+        await addDoc(collection(db, "conversations", conversationId, "messages"), messageData);
+        await setDoc(doc(db, "conversations", conversationId), {
+            lastMessage: newMessage,
+            timestamp: serverTimestamp()
+        }, { merge: true });
+
+        setNewMessage("");
+    };
+
+    if (!conversationId || !otherUser || !currentUser) {
+        return (
+            <Card className="h-full flex flex-col items-center justify-center">
+                <CardContent>
+                    <div className="text-center text-muted-foreground">
+                        <MessageSquare size={48} className="mx-auto mb-4" />
+                        <h2 className="text-xl font-semibold">Select a conversation</h2>
+                        <p>Start chatting with your contacts.</p>
+                    </div>
+                </CardContent>
+            </Card>
+        );
+    }
+    
+    const {displayName, photoURL} = otherUser;
+
     return (
         <Card className="h-full flex flex-col">
             <div className="p-4 border-b flex items-center gap-3">
                 <Avatar>
-                    <AvatarImage src="https://placehold.co/100x100.png" data-ai-hint="person"/>
-                    <AvatarFallback>BW</AvatarFallback>
+                    <AvatarImage src={photoURL || 'https://placehold.co/100x100.png'} data-ai-hint="person"/>
+                    <AvatarFallback>{displayName?.charAt(0) || 'U'}</AvatarFallback>
                 </Avatar>
                 <div>
-                    <p className="font-semibold">Bob Williams</p>
-                    <p className="text-sm text-muted-foreground">Online</p>
+                    <p className="font-semibold">{displayName}</p>
+                    {/*<p className="text-sm text-muted-foreground">Online</p>*/}
                 </div>
             </div>
             <CardContent className="flex-1 overflow-auto p-6 space-y-6">
-                 <div className="flex items-end gap-3">
-                    <Avatar className="h-8 w-8">
-                        <AvatarImage src="https://placehold.co/100x100.png" data-ai-hint="person"/>
-                        <AvatarFallback>BW</AvatarFallback>
-                    </Avatar>
-                    <div className="p-3 rounded-lg rounded-bl-none bg-muted max-w-xs sm:max-w-md">
-                        <p className="text-sm">Can you send over the latest draft of the proposal? I want to give it a final look before the meeting.</p>
+                 {messages.map(msg => (
+                     <div key={msg.id} className={`flex items-end gap-3 ${msg.senderId === currentUser.uid ? 'justify-end' : ''}`}>
+                        {msg.senderId !== currentUser.uid && (
+                             <Avatar className="h-8 w-8">
+                                <AvatarImage src={photoURL || "https://placehold.co/100x100.png"} data-ai-hint="person"/>
+                                <AvatarFallback>{displayName?.charAt(0) || 'U'}</AvatarFallback>
+                            </Avatar>
+                        )}
+                        <div className={`p-3 rounded-lg max-w-xs sm:max-w-md ${msg.senderId === currentUser.uid ? 'rounded-br-none bg-primary text-primary-foreground' : 'rounded-bl-none bg-muted'}`}>
+                            <p className="text-sm">{msg.text}</p>
+                        </div>
+                         {msg.senderId === currentUser.uid && (
+                            <Avatar className="h-8 w-8">
+                                 <AvatarImage src={currentUser.photoURL || "https://placehold.co/100x100.png"} data-ai-hint="person"/>
+                                <AvatarFallback>{currentUser.displayName?.charAt(0) || 'U'}</AvatarFallback>
+                            </Avatar>
+                        )}
                     </div>
-                </div>
-                <div className="flex items-end gap-3 justify-end">
-                     <div className="p-3 rounded-lg rounded-br-none bg-primary text-primary-foreground max-w-xs sm:max-w-md">
-                        <p className="text-sm">Sure, just sent it to your email. Let me know what you think!</p>
-                    </div>
-                    <Avatar className="h-8 w-8">
-                         <AvatarImage src="https://placehold.co/100x100.png" data-ai-hint="person"/>
-                        <AvatarFallback>JD</AvatarFallback>
-                    </Avatar>
-                </div>
-                 <div className="flex items-end gap-3">
-                    <Avatar className="h-8 w-8">
-                        <AvatarImage src="https://placehold.co/100x100.png" data-ai-hint="person"/>
-                        <AvatarFallback>BW</AvatarFallback>
-                    </Avatar>
-                    <div className="p-3 rounded-lg rounded-bl-none bg-muted max-w-xs sm:max-w-md">
-                        <p className="text-sm">Perfect, got it. I'll get back to you with feedback in an hour.</p>
-                    </div>
-                </div>
+                 ))}
+                 <div ref={messagesEndRef} />
             </CardContent>
             <div className="p-4 border-t">
-                <div className="relative">
-                    <Textarea placeholder="Type your message..." className="pr-24 min-h-[60px] resize-none"/>
+                <form onSubmit={handleSendMessage} className="relative">
+                    <Textarea
+                        placeholder="Type your message..."
+                        className="pr-24 min-h-[60px] resize-none"
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleSendMessage(e);
+                            }
+                        }}
+                    />
                     <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                        <Button variant="ghost" size="icon">
+                        <Button variant="ghost" size="icon" type="button">
                             <Bold className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon">
+                        <Button variant="ghost" size="icon" type="button">
                             <Italic className="h-4 w-4" />
                         </Button>
-                        <Button size="icon">
+                        <Button size="icon" type="submit">
                             <Send className="h-4 w-4" />
                         </Button>
                     </div>
-                </div>
+                </form>
             </div>
         </Card>
     );
 }
 
+import { MessageSquare } from "lucide-react";
 
 export default function MessagesPage() {
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+    const [activeOtherUser, setActiveOtherUser] = useState<any | null>(null);
+    const router = useRouter();
+    const searchParams = useSearchParams();
+
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, user => {
+            if (user) {
+                setCurrentUser(user);
+            } else {
+                router.push('/');
+            }
+        });
+        return () => unsubscribe();
+    }, [router]);
+    
+    useEffect(() => {
+        const startChatWith = searchParams.get('startChatWith');
+        if (startChatWith && currentUser) {
+            const getOrCreateConversation = async () => {
+                const conversationQuery = query(
+                    collection(db, 'conversations'),
+                    where('participants', 'in', [[currentUser.uid, startChatWith], [startChatWith, currentUser.uid]])
+                );
+                
+                const querySnapshot = await getDocs(conversationQuery);
+
+                let convId = null;
+
+                querySnapshot.forEach(doc => {
+                    const data = doc.data();
+                    const participants = data.participants;
+                    if(participants.includes(currentUser.uid) && participants.includes(startChatWith)){
+                       convId = doc.id;
+                    }
+                });
+
+                if (convId) {
+                    const userDoc = await getDoc(doc(db, "users", startChatWith));
+                    setActiveConversationId(convId);
+                    setActiveOtherUser({uid: startChatWith, ...userDoc.data()});
+                } else {
+                    const newConvDoc = await addDoc(collection(db, 'conversations'), {
+                        participants: [currentUser.uid, startChatWith],
+                        lastMessage: "Started a new conversation.",
+                        timestamp: serverTimestamp(),
+                    });
+                    const userDoc = await getDoc(doc(db, "users", startChatWith));
+                    setActiveConversationId(newConvDoc.id);
+                    setActiveOtherUser({uid: startChatWith, ...userDoc.data()});
+                }
+                 // remove query param
+                router.replace('/messages', undefined);
+            };
+            getOrCreateConversation();
+        }
+    }, [searchParams, currentUser, router])
+
+
+    const handleSelectConversation = (id: string, otherUser: any) => {
+        setActiveConversationId(id);
+        setActiveOtherUser(otherUser);
+    };
+
     return (
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 h-[calc(100vh-theme(spacing.32))]">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 h-[calc(100vh-theme(spacing.24))]">
             <div className="md:col-span-1 lg:col-span-1 hidden md:block">
-               <ConversationList />
+               <ConversationList onSelectConversation={handleSelectConversation} activeConversationId={activeConversationId}/>
             </div>
             <div className="col-span-1 md:col-span-2 lg:col-span-3">
-               <ChatInterface />
+               <ChatInterface conversationId={activeConversationId} otherUser={activeOtherUser} currentUser={currentUser} />
             </div>
         </div>
     )
 }
+
+    
