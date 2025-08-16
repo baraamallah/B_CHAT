@@ -9,7 +9,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
        <div className="absolute top-8">
         <Link href="/" className="flex items-center space-x-2">
             <Droplets className="h-8 w-8 text-primary" />
-            <span className="text-2xl font-bold text-foreground">CollabDrop</span>
+            <span className="text-2xl font-bold text-foreground">BCHAT</span>
         </Link>
        </div>
       {children}

@@ -18,7 +18,7 @@ export default function SidebarNav() {
       <SidebarHeader>
         <Link href="/profile" className="flex items-center gap-2" prefetch={false}>
           <Droplets className="h-7 w-7 text-primary" />
-          <span className="text-xl font-semibold">CollabDrop</span>
+          <span className="text-xl font-semibold">BCHAT</span>
         </Link>
       </SidebarHeader>
       <SidebarContent>

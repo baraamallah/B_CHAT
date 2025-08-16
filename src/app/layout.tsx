@@ -3,7 +3,7 @@ import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 
 export const metadata: Metadata = {
-  title: 'CollabDrop',
+  title: 'BCHAT',
   description: 'The Serendipity Engine for Collaboration',
 };
 
