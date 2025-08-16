@@ -13,11 +13,12 @@ import { Label } from "@/components/ui/label";
 import { useEffect, useState, useRef } from "react";
 import { auth, db, storage } from "@/lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, setDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useRouter } from "next/navigation";
 
 interface UserProfile {
+    uid: string;
     displayName: string;
     email: string;
     bio: string;
@@ -105,9 +106,23 @@ export default function ProfilePage() {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             if (currentUser) {
-                const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+                const userDocRef = doc(db, "users", currentUser.uid);
+                const userDoc = await getDoc(userDocRef);
                 if (userDoc.exists()) {
                     setUser(userDoc.data() as UserProfile);
+                } else {
+                    // If user exists in auth but not in firestore, create the document
+                    const newUserProfile: UserProfile = {
+                        uid: currentUser.uid,
+                        email: currentUser.email || "",
+                        displayName: currentUser.displayName || "New User",
+                        bio: "",
+                        status: "I'm new!",
+                        photoURL: currentUser.photoURL || "",
+                        bgURL: ""
+                    };
+                    await setDoc(userDocRef, newUserProfile);
+                    setUser(newUserProfile);
                 }
             } else {
                 router.push("/");
@@ -131,11 +146,12 @@ export default function ProfilePage() {
     }
 
     if (loading) {
-        return <div>Loading...</div>;
+        return <div className="flex justify-center items-center h-full">Loading...</div>;
     }
 
     if (!user) {
-        return <div>User not found.</div>;
+        // This case should ideally not be hit anymore, but as a fallback
+        return <div className="flex justify-center items-center h-full">User not found. Redirecting...</div>;
     }
 
     return (
