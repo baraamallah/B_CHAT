@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Button } from "@/components/ui/button";
@@ -13,14 +14,37 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { auth, db } from "@/lib/firebase";
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { setDoc, doc } from "firebase/firestore";
 
 export default function SignupPage() {
     const router = useRouter();
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [fullName, setFullName] = useState('');
+    const [error, setError] = useState<string | null>(null);
 
-    const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        // Mock signup logic
-        router.push('/dashboard');
+        setError(null);
+        try {
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
+            await setDoc(doc(db, "users", user.uid), {
+                uid: user.uid,
+                email: user.email,
+                displayName: fullName,
+                bio: "",
+                status: "",
+                photoURL: "",
+                bgURL: ""
+            });
+            router.push('/profile');
+        } catch (err: any) {
+            setError(err.message);
+        }
     }
 
   return (
@@ -33,9 +57,10 @@ export default function SignupPage() {
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
+        {error && <p className="text-red-500 text-sm">{error}</p>}
         <div className="grid gap-2">
           <Label htmlFor="full-name">Full name</Label>
-          <Input id="full-name" placeholder="Your Name" required />
+          <Input id="full-name" placeholder="Your Name" required value={fullName} onChange={e => setFullName(e.target.value)} />
         </div>
         <div className="grid gap-2">
           <Label htmlFor="email">Email</Label>
@@ -44,11 +69,13 @@ export default function SignupPage() {
             type="email"
             placeholder="m@example.com"
             required
+            value={email}
+            onChange={e => setEmail(e.target.value)}
           />
         </div>
         <div className="grid gap-2">
           <Label htmlFor="password">Password</Label>
-          <Input id="password" type="password" required/>
+          <Input id="password" type="password" required value={password} onChange={e => setPassword(e.target.value)}/>
         </div>
       </CardContent>
       <CardFooter className="flex flex-col gap-4">
@@ -57,7 +84,7 @@ export default function SignupPage() {
         </Button>
         <div className="text-center text-sm">
           Already have an account?{" "}
-          <Link href="/login" className="underline">
+          <Link href="/" className="underline">
             Login
           </Link>
         </div>
@@ -66,3 +93,4 @@ export default function SignupPage() {
     </Card>
   );
 }
+

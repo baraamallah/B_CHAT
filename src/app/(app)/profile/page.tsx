@@ -1,107 +1,178 @@
+
+"use client";
+
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { MessageCircle, Edit, FileText } from "lucide-react";
-import Image from "next/image";
+import { Edit, LogOut } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { useEffect, useState, useRef } from "react";
+import { auth, db, storage } from "@/lib/firebase";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { useRouter } from "next/navigation";
 
-function ProfileHeader() {
-  return (
-    <Card className="mb-8">
-      <CardContent className="p-6">
-        <div className="flex flex-col md:flex-row items-center gap-6">
-          <Avatar className="h-24 w-24 border-4 border-background ring-2 ring-primary">
-            <AvatarImage src="https://placehold.co/200x200.png" data-ai-hint="person portrait"/>
-            <AvatarFallback>JD</AvatarFallback>
-          </Avatar>
-          <div className="flex-1 text-center md:text-left">
-            <h1 className="text-2xl font-bold">Jane Doe</h1>
-            <p className="text-muted-foreground">Quantum Researcher & Tech Ethicist</p>
-          </div>
-          <div className="flex gap-2">
-            <Button><MessageCircle className="mr-2 h-4 w-4"/>Send Message</Button>
-            <Button variant="outline"><Edit className="mr-2 h-4 w-4"/>Edit Profile</Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+interface UserProfile {
+    displayName: string;
+    email: string;
+    bio: string;
+    status: string;
+    photoURL: string;
+    bgURL: string;
 }
 
-function DocumentGrid() {
-    const documents = [
-        { title: "Project Phoenix Brief", image: "https://placehold.co/400x300.png", hint: "document presentation" },
-        { title: "Market Analysis Q3", image: "https://placehold.co/400x300.png", hint: "charts graphs" },
-        { title: "Ethical AI Framework", image: "https://placehold.co/400x300.png", hint: "technology code" },
-        { title: "Quantum Entanglement... ", image: "https://placehold.co/400x300.png", hint: "science abstract" },
-    ];
-    return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {documents.map(doc => (
-            <Card key={doc.title} className="overflow-hidden">
-                <Image src={doc.image} data-ai-hint={doc.hint} alt={doc.title} width={400} height={300} className="w-full h-40 object-cover" />
-                <CardHeader>
-                    <CardTitle className="text-base truncate">{doc.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <Button variant="secondary" className="w-full">
-                        <FileText className="mr-2 h-4 w-4"/> View Document
-                    </Button>
-                </CardContent>
-            </Card>
-            ))}
-        </div>
-    )
-}
+function EditProfileDialog({ user, onUpdate }: { user: UserProfile, onUpdate: (data: Partial<UserProfile>) => void }) {
+    const [displayName, setDisplayName] = useState(user.displayName);
+    const [bio, setBio] = useState(user.bio);
+    const [status, setStatus] = useState(user.status);
+    const profilePicRef = useRef<HTMLInputElement>(null);
+    const bgRef = useRef<HTMLInputElement>(null);
+    const [profilePicFile, setProfilePicFile] = useState<File | null>(null);
+    const [bgFile, setBgFile] = useState<File | null>(null);
 
-function AboutTab() {
-    const categories = ["Quantum Computing", "AI Ethics", "Decentralized Systems", "UX Research"];
-    const hashtags = ["#innovation", "#deeptech", "#HCI", "#philosophy", "#sustainability"];
+    const handleSave = async () => {
+        const updatedData: Partial<UserProfile> = { displayName, bio, status };
+        
+        if (profilePicFile) {
+            const storageRef = ref(storage, `profile_pictures/${auth.currentUser?.uid}`);
+            await uploadBytes(storageRef, profilePicFile);
+            updatedData.photoURL = await getDownloadURL(storageRef);
+        }
+
+        if (bgFile) {
+            const storageRef = ref(storage, `backgrounds/${auth.currentUser?.uid}`);
+            await uploadBytes(storageRef, bgFile);
+            updatedData.bgURL = await getDownloadURL(storageRef);
+        }
+        
+        onUpdate(updatedData);
+    };
 
     return (
-        <Card>
-            <CardContent className="p-6 grid gap-6">
-                <div>
-                    <h3 className="font-semibold mb-2">About Me</h3>
-                    <p className="text-muted-foreground">
-                        I am a passionate researcher exploring the intersections of deep technology and human-computer interaction. My goal is to build ethical, human-centric systems that solve meaningful problems. I believe in the power of serendipitous collaboration to spark groundbreaking ideas.
-                    </p>
-                </div>
-                 <div>
-                    <h3 className="font-semibold mb-3">Preferred Categories</h3>
-                    <div className="flex flex-wrap gap-2">
-                        {categories.map(cat => <Badge key={cat} variant="secondary">{cat}</Badge>)}
+        <Dialog>
+            <DialogTrigger asChild>
+                <Button variant="outline"><Edit className="mr-2 h-4 w-4" />Edit Profile</Button>
+            </DialogTrigger>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Edit Profile</DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="grid gap-2">
+                        <Label htmlFor="displayName">Display Name</Label>
+                        <Input id="displayName" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+                    </div>
+                    <div className="grid gap-2">
+                        <Label htmlFor="status">Status</Label>
+                        <Input id="status" value={status} onChange={(e) => setStatus(e.target.value)} />
+                    </div>
+                    <div className="grid gap-2">
+                        <Label htmlFor="bio">Bio</Label>
+                        <Textarea id="bio" value={bio} onChange={(e) => setBio(e.target.value)} />
+                    </div>
+                    <div className="grid gap-2">
+                        <Label>Profile Picture</Label>
+                        <Input type="file" ref={profilePicRef} onChange={(e) => setProfilePicFile(e.target.files?.[0] || null)} />
+                    </div>
+                    <div className="grid gap-2">
+                        <Label>Background Image</Label>
+                        <Input type="file" ref={bgRef} onChange={(e) => setBgFile(e.target.files?.[0] || null)} />
                     </div>
                 </div>
-                 <div>
-                    <h3 className="font-semibold mb-3">Hashtags</h3>
-                    <div className="flex flex-wrap gap-2">
-                        {hashtags.map(tag => <Badge key={tag} variant="outline">{tag}</Badge>)}
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
-    )
+                <DialogFooter>
+                    <DialogClose asChild>
+                        <Button type="button" variant="secondary">Cancel</Button>
+                    </DialogClose>
+                    <DialogClose asChild>
+                      <Button onClick={handleSave}>Save</Button>
+                    </DialogClose>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
 }
-
 
 export default function ProfilePage() {
-  return (
-    <div className="space-y-6">
-      <ProfileHeader />
-      <Tabs defaultValue="documents">
-        <TabsList>
-          <TabsTrigger value="documents">Documents (12)</TabsTrigger>
-          <TabsTrigger value="about">About</TabsTrigger>
-        </TabsList>
-        <TabsContent value="documents" className="mt-6">
-            <DocumentGrid />
-        </TabsContent>
-        <TabsContent value="about" className="mt-6">
-            <AboutTab />
-        </TabsContent>
-      </Tabs>
-    </div>
-  );
+    const [user, setUser] = useState<UserProfile | null>(null);
+    const [loading, setLoading] = useState(true);
+    const router = useRouter();
+
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+            if (currentUser) {
+                const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+                if (userDoc.exists()) {
+                    setUser(userDoc.data() as UserProfile);
+                }
+            } else {
+                router.push("/");
+            }
+            setLoading(false);
+        });
+        return () => unsubscribe();
+    }, [router]);
+
+    const handleUpdateProfile = async (data: Partial<UserProfile>) => {
+        if (auth.currentUser) {
+            const userDocRef = doc(db, "users", auth.currentUser.uid);
+            await updateDoc(userDocRef, data);
+            setUser(prevUser => prevUser ? { ...prevUser, ...data } : null);
+        }
+    };
+
+    const handleLogout = async () => {
+        await signOut(auth);
+        router.push('/');
+    }
+
+    if (loading) {
+        return <div>Loading...</div>;
+    }
+
+    if (!user) {
+        return <div>User not found.</div>;
+    }
+
+    return (
+        <div className="space-y-6">
+            <Card className="mb-8 overflow-hidden">
+                <div style={{ backgroundImage: `url(${user.bgURL || 'https://placehold.co/1200x300.png'})`, backgroundSize: 'cover', backgroundPosition: 'center' }} className="h-48 w-full" data-ai-hint="abstract background"></div>
+                <CardContent className="p-6">
+                    <div className="flex flex-col md:flex-row items-center gap-6 -mt-16">
+                        <Avatar className="h-24 w-24 border-4 border-card ring-2 ring-primary">
+                            <AvatarImage src={user.photoURL || "https://placehold.co/200x200.png"} data-ai-hint="person portrait" />
+                            <AvatarFallback>{user.displayName.charAt(0)}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 text-center md:text-left mt-4 md:mt-0">
+                            <h1 className="text-2xl font-bold">{user.displayName}</h1>
+                            <p className="text-muted-foreground">{user.status}</p>
+                        </div>
+                        <div className="flex gap-2">
+                            <EditProfileDialog user={user} onUpdate={handleUpdateProfile} />
+                            <Button variant="outline" onClick={handleLogout}><LogOut className="mr-2 h-4 w-4"/>Logout</Button>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>About Me</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-muted-foreground">
+                        {user.bio || "This user hasn't written a bio yet."}
+                    </p>
+                    <div className="mt-4">
+                        <Badge variant="secondary">{user.email}</Badge>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+    );
 }

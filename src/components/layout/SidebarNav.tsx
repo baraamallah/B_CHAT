@@ -1,15 +1,13 @@
+
 'use client';
 
-import { Droplets, LayoutDashboard, MessageSquare, User, Search, Settings } from 'lucide-react';
+import { Droplets, User } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { SidebarHeader, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter } from '@/components/ui/sidebar';
+import { SidebarHeader, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from '@/components/ui/sidebar';
 
 const navItems = [
-  { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/messages', icon: MessageSquare, label: 'Messages' },
   { href: '/profile', icon: User, label: 'Profile' },
-  { href: '/search', icon: Search, label: 'Discover' },
 ];
 
 export default function SidebarNav() {
@@ -18,7 +16,7 @@ export default function SidebarNav() {
   return (
     <>
       <SidebarHeader>
-        <Link href="/dashboard" className="flex items-center gap-2" prefetch={false}>
+        <Link href="/profile" className="flex items-center gap-2" prefetch={false}>
           <Droplets className="h-7 w-7 text-primary" />
           <span className="text-xl font-semibold">CollabDrop</span>
         </Link>
@@ -41,21 +39,6 @@ export default function SidebarNav() {
           ))}
         </SidebarMenu>
       </SidebarContent>
-      <SidebarFooter>
-         <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                tooltip="Settings"
-              >
-                <Link href="#">
-                  <Settings />
-                  <span>Settings</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-         </SidebarMenu>
-      </SidebarFooter>
     </>
   );
 }
