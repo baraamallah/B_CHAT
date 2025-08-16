@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Droplets } from 'lucide-react';
+import { Logo } from '@/components/icons/Logo';
 import Link from 'next/link';
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
@@ -8,7 +8,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     <main className="flex flex-col items-center justify-center min-h-screen bg-muted/50 p-4">
        <div className="absolute top-8">
         <Link href="/" className="flex items-center space-x-2">
-            <Droplets className="h-8 w-8 text-primary" />
+            <Logo className="h-8 w-8 text-primary" />
             <span className="text-2xl font-bold text-foreground">BCHAT</span>
         </Link>
        </div>

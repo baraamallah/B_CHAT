@@ -17,7 +17,7 @@ import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
 import { signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
 import { useEffect, useState } from "react";
-import { Droplets } from "lucide-react";
+import { Logo } from "@/components/icons/Logo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -49,7 +49,7 @@ export default function LoginPage() {
     <main className="flex flex-col items-center justify-center min-h-screen bg-muted/50 p-4">
        <div className="absolute top-8">
         <Link href="/" className="flex items-center space-x-2">
-            <Droplets className="h-8 w-8 text-primary" />
+            <Logo className="h-8 w-8 text-primary" />
             <span className="text-2xl font-bold text-foreground">BCHAT</span>
         </Link>
        </div>

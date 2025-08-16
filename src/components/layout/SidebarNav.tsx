@@ -1,7 +1,8 @@
 
 'use client';
 
-import { Droplets, User } from 'lucide-react';
+import { Logo } from '@/components/icons/Logo';
+import { User } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { SidebarHeader, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from '@/components/ui/sidebar';
@@ -17,7 +18,7 @@ export default function SidebarNav() {
     <>
       <SidebarHeader>
         <Link href="/profile" className="flex items-center gap-2" prefetch={false}>
-          <Droplets className="h-7 w-7 text-primary" />
+          <Logo className="h-7 w-7 text-primary" />
           <span className="text-xl font-semibold">BCHAT</span>
         </Link>
       </SidebarHeader>
