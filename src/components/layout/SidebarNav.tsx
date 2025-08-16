@@ -2,13 +2,15 @@
 'use client';
 
 import { Logo } from '@/components/icons/Logo';
-import { User } from 'lucide-react';
+import { User, MessageSquare, Search } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { SidebarHeader, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from '@/components/ui/sidebar';
 
 const navItems = [
   { href: '/profile', icon: User, label: 'Profile' },
+  { href: '/messages', icon: MessageSquare, label: 'Messages' },
+  { href: '/search', icon: Search, label: 'Search' },
 ];
 
 export default function SidebarNav() {
