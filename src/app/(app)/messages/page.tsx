@@ -5,14 +5,15 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Bold, Italic, Send, Search } from "lucide-react";
+import { Bold, Italic, Send, Search, Trash2, MessageSquare } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useState, useRef } from "react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp, orderBy, doc, getDoc, setDoc, getDocs } from "firebase/firestore";
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp, orderBy, doc, getDoc, setDoc, getDocs, updateDoc, writeBatch } from "firebase/firestore";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 
 interface Conversation {
@@ -108,6 +109,7 @@ interface Message {
     senderId: string;
     text: string;
     timestamp: any;
+    isDeleted?: boolean;
 }
 
 function ChatInterface({ conversationId, otherUser, currentUser }: { conversationId: string | null, otherUser: any | null, currentUser: User | null }) {
@@ -142,16 +144,32 @@ function ChatInterface({ conversationId, otherUser, currentUser }: { conversatio
         const messageData = {
             text: newMessage,
             senderId: currentUser.uid,
-            timestamp: serverTimestamp()
+            timestamp: serverTimestamp(),
+            isDeleted: false,
         };
+        
+        const batch = writeBatch(db);
 
-        await addDoc(collection(db, "conversations", conversationId, "messages"), messageData);
-        await setDoc(doc(db, "conversations", conversationId), {
+        const messagesRef = doc(collection(db, "conversations", conversationId, "messages"));
+        batch.set(messagesRef, messageData);
+
+        const conversationRef = doc(db, "conversations", conversationId);
+        batch.update(conversationRef, {
             lastMessage: newMessage,
             timestamp: serverTimestamp()
-        }, { merge: true });
+        });
 
+        await batch.commit();
         setNewMessage("");
+    };
+
+    const handleDeleteMessage = async (messageId: string) => {
+        if (!conversationId) return;
+        const messageRef = doc(db, "conversations", conversationId, "messages", messageId);
+        await updateDoc(messageRef, {
+            text: "This message was deleted.",
+            isDeleted: true
+        });
     };
 
     if (!conversationId || !otherUser || !currentUser) {
@@ -184,15 +202,29 @@ function ChatInterface({ conversationId, otherUser, currentUser }: { conversatio
             </div>
             <CardContent className="flex-1 overflow-auto p-6 space-y-6">
                  {messages.map(msg => (
-                     <div key={msg.id} className={`flex items-end gap-3 ${msg.senderId === currentUser.uid ? 'justify-end' : ''}`}>
+                     <div key={msg.id} className={`group flex items-end gap-3 ${msg.senderId === currentUser.uid ? 'justify-end' : ''}`}>
                         {msg.senderId !== currentUser.uid && (
                              <Avatar className="h-8 w-8">
                                 <AvatarImage src={photoURL || "https://placehold.co/100x100.png"} data-ai-hint="person"/>
                                 <AvatarFallback>{displayName?.charAt(0) || 'U'}</AvatarFallback>
                             </Avatar>
                         )}
-                        <div className={`p-3 rounded-lg max-w-xs sm:max-w-md ${msg.senderId === currentUser.uid ? 'rounded-br-none bg-primary text-primary-foreground' : 'rounded-bl-none bg-muted'}`}>
-                            <p className="text-sm">{msg.text}</p>
+                        <div className={`p-3 rounded-lg max-w-xs sm:max-w-md relative ${msg.senderId === currentUser.uid ? 'rounded-br-none bg-primary text-primary-foreground' : 'rounded-bl-none bg-muted'}`}>
+                            <p className={`text-sm ${msg.isDeleted ? 'italic text-muted-foreground' : ''}`}>{msg.text}</p>
+                             {msg.senderId === currentUser.uid && !msg.isDeleted && (
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="absolute -top-4 -right-4 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0">
+                                       <Button variant="destructive" className="w-full" onClick={() => handleDeleteMessage(msg.id)}>
+                                            Delete
+                                        </Button>
+                                    </PopoverContent>
+                                </Popover>
+                            )}
                         </div>
                          {msg.senderId === currentUser.uid && (
                             <Avatar className="h-8 w-8">
@@ -234,8 +266,6 @@ function ChatInterface({ conversationId, otherUser, currentUser }: { conversatio
         </Card>
     );
 }
-
-import { MessageSquare } from "lucide-react";
 
 export default function MessagesPage() {
     const [currentUser, setCurrentUser] = useState<User | null>(null);

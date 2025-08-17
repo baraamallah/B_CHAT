@@ -4,7 +4,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Edit, LogOut, UserPlus, Check, X } from "lucide-react";
+import { Edit, LogOut, UserPlus, Check, X, Wifi, WifiOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -13,11 +13,13 @@ import { Label } from "@/components/ui/label";
 import { useEffect, useState, useRef } from "react";
 import { auth, db, storage } from "@/lib/firebase";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
-import { doc, getDoc, updateDoc, setDoc, collection, query, where, onSnapshot, arrayUnion, arrayRemove, getDocs, writeBatch } from "firebase/firestore";
+import { doc, getDoc, updateDoc, setDoc, collection, query, where, onSnapshot, arrayUnion, arrayRemove, getDocs, writeBatch, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Link from "next/link";
+import { formatDistanceToNow } from "date-fns";
+
 
 interface UserProfile {
     uid: string;
@@ -28,6 +30,8 @@ interface UserProfile {
     photoURL: string;
     bgURL: string;
     friends?: string[];
+    lastActive?: any;
+    online?: boolean;
 }
 
 interface FriendRequest {
@@ -132,9 +136,13 @@ function FriendsTab({ currentUser }: { currentUser: User }) {
         const unsub = onSnapshot(doc(db, 'users', currentUser.uid), async (doc) => {
             const userData = doc.data() as UserProfile;
             if (userData && userData.friends) {
+                 if (userData.friends.length === 0) {
+                    setFriends([]);
+                    return;
+                }
                 const friendPromises = userData.friends.map(friendId => getDoc(db.collection('users').doc(friendId)));
                 const friendDocs = await Promise.all(friendPromises);
-                const friendData = friendDocs.map(fDoc => ({ uid: fDoc.id, ...fDoc.data() } as Friend));
+                const friendData = friendDocs.filter(fDoc => fDoc.exists()).map(fDoc => ({ uid: fDoc.id, ...fDoc.data() } as Friend));
                 setFriends(friendData);
             }
         });
@@ -156,7 +164,7 @@ function FriendsTab({ currentUser }: { currentUser: User }) {
             batch.update(friendUserRef, { friends: arrayUnion(currentUser.uid) });
             
         } else {
-            batch.update(requestRef, { status: 'declined' });
+            batch.delete(requestRef);
         }
         await batch.commit();
     };
@@ -234,27 +242,37 @@ export default function ProfilePage() {
             if (fbUser) {
                 setCurrentUser(fbUser);
                 const userDocRef = doc(db, "users", fbUser.uid);
-                const userDoc = await getDoc(userDocRef);
-                if (userDoc.exists()) {
-                    setUser(userDoc.data() as UserProfile);
-                } else {
-                    const newUserProfile: UserProfile = {
-                        uid: fbUser.uid,
-                        email: fbUser.email || "",
-                        displayName: fbUser.displayName || "New User",
-                        bio: "",
-                        status: "I'm new!",
-                        photoURL: fbUser.photoURL || "",
-                        bgURL: ""
-                    };
-                    await setDoc(userDocRef, newUserProfile);
-                    setUser(newUserProfile);
-                }
+                
+                const unsub = onSnapshot(userDocRef, (doc) => {
+                    if (doc.exists()) {
+                        setUser(doc.data() as UserProfile);
+                    } else {
+                        const newUserProfile: UserProfile = {
+                            uid: fbUser.uid,
+                            email: fbUser.email || "",
+                            displayName: fbUser.displayName || "New User",
+                            bio: "",
+                            status: "I'm new!",
+                            photoURL: fbUser.photoURL || "",
+                            bgURL: "",
+                            friends: [],
+                            lastActive: serverTimestamp(),
+                            online: true,
+                        };
+                        setDoc(userDocRef, newUserProfile);
+                        setUser(newUserProfile);
+                    }
+                });
+
+                setLoading(false);
+                return () => unsub();
+
             } else {
                 router.push("/");
+                setLoading(false);
             }
-            setLoading(false);
         });
+
         return () => unsubscribe();
     }, [router]);
 
@@ -270,6 +288,22 @@ export default function ProfilePage() {
         await signOut(auth);
         router.push('/');
     }
+    
+    const renderStatus = () => {
+        if (!user) return null;
+
+        if (user.online) {
+            return <div className="flex items-center gap-1 text-sm text-green-500"><Wifi className="h-4 w-4" /> Online</div>
+        }
+
+        if (user.lastActive) {
+            const lastActiveDate = user.lastActive.toDate();
+            return <div className="flex items-center gap-1 text-sm text-muted-foreground"><WifiOff className="h-4 w-4" /> Last active {formatDistanceToNow(lastActiveDate, { addSuffix: true })}</div>
+        }
+        
+        return null;
+    }
+
 
     if (loading || !user || !currentUser) {
         return <div className="flex justify-center items-center h-full">Loading...</div>;
@@ -287,7 +321,10 @@ export default function ProfilePage() {
                         </Avatar>
                         <div className="flex-1 text-center md:text-left mt-4 md:mt-0">
                             <h1 className="text-2xl font-bold">{user.displayName}</h1>
-                            <p className="text-muted-foreground">{user.status}</p>
+                            <p className="text-muted-foreground italic">"{user.status}"</p>
+                            <div className="mt-2">
+                                {renderStatus()}
+                            </div>
                         </div>
                         <div className="flex gap-2">
                             <EditProfileDialog user={user} onUpdate={handleUpdateProfile} />
