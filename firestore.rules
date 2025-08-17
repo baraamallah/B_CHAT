@@ -3,38 +3,40 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Users can read and write their own profile
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-      // Anyone can read anyone else's profile
-      allow get: if request.auth != null;
-    }
-
-    // Friend requests can be created by any authenticated user
-    match /friendRequests/{requestId} {
-      allow create: if request.auth != null;
-      // Requests can be read by the sender or receiver
-      allow read: if request.auth != null && (request.auth.uid == resource.data.from || request.auth.uid == resource.data.to);
-      // Requests can be updated or deleted by the receiver
-      allow update, delete: if request.auth != null && request.auth.uid == resource.data.to;
-    }
     
-    // Conversations can be read by participants
+    // Helper function to check if a user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Users can read public profiles, but only write to their own document.
+    // Online status and last active can be updated by the user.
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if request.auth.uid == userId;
+      allow update: if request.auth.uid == userId;
+    }
+
+    // Friend requests can be read by the recipient, and created by anyone authenticated.
+    // They can be updated/deleted by either the sender or receiver.
+    match /friendRequests/{requestId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.to || request.auth.uid == resource.data.from);
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.from;
+      allow update, delete: if isAuthenticated() && (request.auth.uid == resource.data.to || request.auth.uid == resource.data.from);
+    }
+
+    // Conversations can be read or written to by participants.
     match /conversations/{conversationId} {
-      allow read, create: if request.auth != null && request.auth.uid in resource.data.participants;
-      allow update: if request.auth != null && request.auth.uid in resource.data.participants;
-      
-      // Messages can be created by a participant
+      allow read, create: if isAuthenticated() && request.auth.uid in resource.data.participants;
+      allow update: if isAuthenticated() && request.auth.uid in resource.data.participants;
+
+      // Messages can be created by conversation participants.
+      // A user can only "delete" (update) their own message.
       match /messages/{messageId} {
-        allow create: if request.auth != null && get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid]);
-        // Messages can be read by a participant
-        allow read: if request.auth != null && get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid]);
-        // A user can "delete" (update) their own message
-        allow update: if request.auth != null && request.auth.uid == resource.data.senderId;
+        allow read, create: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+        allow update: if isAuthenticated() && request.auth.uid == resource.data.senderId;
+        allow delete: if false; // Prevent hard deletes
       }
     }
   }
 }
-
-    
