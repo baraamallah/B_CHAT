@@ -56,23 +56,33 @@ function EditProfileDialog({ user, onUpdate }: { user: UserProfile, onUpdate: (d
     const bgRef = useRef<HTMLInputElement>(null);
     const [profilePicFile, setProfilePicFile] = useState<File | null>(null);
     const [bgFile, setBgFile] = useState<File | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
 
     const handleSave = async () => {
+        if (!auth.currentUser) return;
+        setIsSaving(true);
         const updatedData: Partial<UserProfile> = { displayName, bio, status };
         
-        if (profilePicFile) {
-            const storageRef = ref(storage, `profile_pictures/${auth.currentUser?.uid}`);
-            await uploadBytes(storageRef, profilePicFile);
-            updatedData.photoURL = await getDownloadURL(storageRef);
-        }
+        try {
+            if (profilePicFile) {
+                const storageRef = ref(storage, `profile_pictures/${auth.currentUser.uid}`);
+                await uploadBytes(storageRef, profilePicFile);
+                updatedData.photoURL = await getDownloadURL(storageRef);
+            }
 
-        if (bgFile) {
-            const storageRef = ref(storage, `backgrounds/${auth.currentUser?.uid}`);
-            await uploadBytes(storageRef, bgFile);
-            updatedData.bgURL = await getDownloadURL(storageRef);
+            if (bgFile) {
+                const storageRef = ref(storage, `backgrounds/${auth.currentUser.uid}`);
+                await uploadBytes(storageRef, bgFile);
+                updatedData.bgURL = await getDownloadURL(storageRef);
+            }
+            
+            onUpdate(updatedData);
+
+        } catch (error) {
+            console.error("Error updating profile: ", error);
+        } finally {
+            setIsSaving(false);
         }
-        
-        onUpdate(updatedData);
     };
 
     return (
@@ -99,19 +109,21 @@ function EditProfileDialog({ user, onUpdate }: { user: UserProfile, onUpdate: (d
                     </div>
                     <div className="grid gap-2">
                         <Label>Profile Picture</Label>
-                        <Input type="file" ref={profilePicRef} onChange={(e) => setProfilePicFile(e.target.files?.[0] || null)} />
+                        <Input type="file" ref={profilePicRef} onChange={(e) => setProfilePicFile(e.target.files?.[0] || null)} accept="image/*" />
                     </div>
                     <div className="grid gap-2">
                         <Label>Background Image</Label>
-                        <Input type="file" ref={bgRef} onChange={(e) => setBgFile(e.target.files?.[0] || null)} />
+                        <Input type="file" ref={bgRef} onChange={(e) => setBgFile(e.target.files?.[0] || null)} accept="image/*" />
                     </div>
                 </div>
                 <DialogFooter>
                     <DialogClose asChild>
-                        <Button type="button" variant="secondary">Cancel</Button>
+                        <Button type="button" variant="secondary" disabled={isSaving}>Cancel</Button>
                     </DialogClose>
                     <DialogClose asChild>
-                      <Button onClick={handleSave}>Save</Button>
+                      <Button onClick={handleSave} disabled={isSaving}>
+                        {isSaving ? 'Saving...' : 'Save'}
+                      </Button>
                     </DialogClose>
                 </DialogFooter>
             </DialogContent>
@@ -133,17 +145,18 @@ function FriendsTab({ currentUser }: { currentUser: User }) {
     }, [currentUser.uid]);
 
      useEffect(() => {
-        const unsub = onSnapshot(doc(db, 'users', currentUser.uid), async (doc) => {
-            const userData = doc.data() as UserProfile;
-            if (userData && userData.friends) {
-                 if (userData.friends.length === 0) {
-                    setFriends([]);
-                    return;
-                }
-                const friendPromises = userData.friends.map(friendId => getDoc(db.collection('users').doc(friendId)));
+        if (!currentUser) return;
+        const unsub = onSnapshot(doc(db, 'users', currentUser.uid), async (userDoc) => {
+            const userData = userDoc.data() as UserProfile;
+            if (userData && userData.friends && userData.friends.length > 0) {
+                const friendPromises = userData.friends.map(friendId => getDoc(doc(db, 'users', friendId)));
                 const friendDocs = await Promise.all(friendPromises);
-                const friendData = friendDocs.filter(fDoc => fDoc.exists()).map(fDoc => ({ uid: fDoc.id, ...fDoc.data() } as Friend));
+                const friendData = friendDocs
+                    .filter(fDoc => fDoc.exists())
+                    .map(fDoc => ({ uid: fDoc.id, ...fDoc.data() } as Friend));
                 setFriends(friendData);
+            } else {
+                setFriends([]);
             }
         });
         return () => unsub();
@@ -247,6 +260,7 @@ export default function ProfilePage() {
                     if (doc.exists()) {
                         setUser(doc.data() as UserProfile);
                     } else {
+                        // This logic handles creation of user profile if it doesn't exist
                         const newUserProfile: UserProfile = {
                             uid: fbUser.uid,
                             email: fbUser.email || "",
@@ -259,12 +273,13 @@ export default function ProfilePage() {
                             lastActive: serverTimestamp(),
                             online: true,
                         };
-                        setDoc(userDocRef, newUserProfile);
-                        setUser(newUserProfile);
+                        setDoc(userDocRef, newUserProfile).then(() => {
+                            setUser(newUserProfile);
+                        });
                     }
+                     setLoading(false);
                 });
 
-                setLoading(false);
                 return () => unsub();
 
             } else {
@@ -280,11 +295,16 @@ export default function ProfilePage() {
         if (auth.currentUser) {
             const userDocRef = doc(db, "users", auth.currentUser.uid);
             await updateDoc(userDocRef, data);
-            setUser(prevUser => prevUser ? { ...prevUser, ...data } : null);
+            // The onSnapshot listener will automatically update the state,
+            // so manual state update here is redundant.
+            // setUser(prevUser => prevUser ? { ...prevUser, ...data } : null);
         }
     };
 
     const handleLogout = async () => {
+        if(auth.currentUser) {
+            await updateDoc(doc(db, "users", auth.currentUser.uid), { online: false, lastActive: serverTimestamp() });
+        }
         await signOut(auth);
         router.push('/');
     }
@@ -306,13 +326,13 @@ export default function ProfilePage() {
 
 
     if (loading || !user || !currentUser) {
-        return <div className="flex justify-center items-center h-full">Loading...</div>;
+        return <div className="flex justify-center items-center h-screen">Loading...</div>;
     }
 
     return (
         <div className="space-y-6">
             <Card className="mb-8 overflow-hidden">
-                <div style={{ backgroundImage: `url(${user.bgURL || 'https://placehold.co/1200x300.png'})`, backgroundSize: 'cover', backgroundPosition: 'center' }} className="h-48 w-full" data-ai-hint="abstract background"></div>
+                <div style={{ backgroundImage: `url(${user.bgURL || 'https://placehold.co/1200x300.png'})`, backgroundSize: 'cover', backgroundPosition: 'center' }} className="h-48 w-full bg-muted" data-ai-hint="abstract background"></div>
                 <CardContent className="p-6">
                     <div className="flex flex-col md:flex-row items-center gap-6 -mt-16">
                         <Avatar className="h-24 w-24 border-4 border-card ring-2 ring-primary">
@@ -362,5 +382,7 @@ export default function ProfilePage() {
         </div>
     );
 }
+
+    
 
     

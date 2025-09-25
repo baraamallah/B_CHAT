@@ -1,8 +1,8 @@
 
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore, enableIndexedDbPersistence, initializeFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
+import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
+import { getAuth, Auth } from "firebase/auth";
+import { getFirestore, Firestore, initializeFirestore } from "firebase/firestore";
+import { getStorage, FirebaseStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAGXB1NKMMiuAfx-v2DjAjwsxXtftNhDUA",
@@ -14,15 +14,27 @@ const firebaseConfig = {
   measurementId: "G-ZM7GX35M5L"
 };
 
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+let app: FirebaseApp;
+let auth: Auth;
+let db: Firestore;
+let storage: FirebaseStorage;
 
-const db = initializeFirestore(app, {
-  localCache: {
-    kind: 'persistent'
-  }
-});
+if (getApps().length === 0) {
+    app = initializeApp(firebaseConfig);
+    db = initializeFirestore(app, {
+      localCache: {
+        kind: 'persistent'
+      }
+    });
+} else {
+    app = getApp();
+    db = getFirestore(app);
+}
 
-const auth = getAuth(app);
-const storage = getStorage(app);
+auth = getAuth(app);
+storage = getStorage(app);
+
 
 export { app, auth, db, storage };
+
+    
