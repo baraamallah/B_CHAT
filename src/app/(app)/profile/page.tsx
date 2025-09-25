@@ -68,6 +68,8 @@ function EditProfileDialog({ user, onUpdate }: { user: UserProfile, onUpdate: (d
     const [displayName, setDisplayName] = useState(user.displayName);
     const [bio, setBio] = useState(user.bio);
     const [status, setStatus] = useState(user.status);
+    const [dob, setDob] = useState(user.dob);
+    const [phone, setPhone] = useState(user.phone);
     const [photoURL, setPhotoURL] = useState(user.photoURL);
     const [bgURL, setBgURL] = useState(user.bgURL);
     const [isSaving, setIsSaving] = useState(false);
@@ -75,7 +77,7 @@ function EditProfileDialog({ user, onUpdate }: { user: UserProfile, onUpdate: (d
     const handleSave = async () => {
         if (!auth.currentUser) return;
         setIsSaving(true);
-        const updatedData: Partial<UserProfile> = { displayName, bio, status, photoURL, bgURL };
+        const updatedData: Partial<UserProfile> = { displayName, bio, status, photoURL, bgURL, dob, phone };
         
         try {
             await onUpdate(updatedData);
@@ -107,6 +109,14 @@ function EditProfileDialog({ user, onUpdate }: { user: UserProfile, onUpdate: (d
                     <div className="grid gap-2">
                         <Label htmlFor="bio">Bio</Label>
                         <Textarea id="bio" value={bio} onChange={(e) => setBio(e.target.value)} />
+                    </div>
+                     <div className="grid gap-2">
+                        <Label htmlFor="dob">Date of Birth</Label>
+                        <Input id="dob" type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
+                    </div>
+                     <div className="grid gap-2">
+                        <Label htmlFor="phone">Phone</Label>
+                        <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
                     </div>
                      <div className="grid gap-2">
                         <Label htmlFor="photoURL">Profile Picture URL</Label>
@@ -369,6 +379,7 @@ export default function ProfilePage() {
                         }
                     } else {
                         // This logic handles creation of user profile if it doesn't exist
+                         const friendCode = generateFriendCode();
                          const newUserProfile: UserProfile = {
                             uid: fbUser.uid,
                             email: fbUser.email || "",
@@ -381,7 +392,7 @@ export default function ProfilePage() {
                             lastActive: serverTimestamp(),
                             online: true,
                             role: 'user',
-                            friendCode: generateFriendCode(),
+                            friendCode: friendCode,
                             dob: "",
                             phone: "",
                         };
@@ -407,6 +418,7 @@ export default function ProfilePage() {
         if (auth.currentUser) {
             const userDocRef = doc(db, "users", auth.currentUser.uid);
             await updateDoc(userDocRef, data);
+            toast({title: "Profile updated successfully!"});
         }
     };
 

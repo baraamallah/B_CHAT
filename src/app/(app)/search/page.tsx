@@ -115,27 +115,31 @@ export default function SearchPage() {
       };
 
       const usersRef = collection(db, "users");
-      const q = query(usersRef, 
-        or(
-            where("displayName", ">=", searchQuery),
-            where("displayName", "<=", searchQuery + '\uf8ff'),
-            where("friendCode", "==", searchQuery.toUpperCase())
-        ),
-        limit(20)
-      );
+      const normalizedQuery = searchQuery.toUpperCase();
       
-      const querySnapshot = await getDocs(q);
-      const users: FoundUser[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        // Additional client-side filtering for displayName range
-        const nameMatch = data.displayName && data.displayName.toLowerCase().startsWith(searchQuery.toLowerCase());
-        const codeMatch = data.friendCode === searchQuery.toUpperCase();
+      const nameQuery = query(usersRef, orderBy("displayName"), startAt(searchQuery), endAt(searchQuery + '\uf8ff'), limit(20));
+      const codeQuery = query(usersRef, where("friendCode", "==", normalizedQuery), limit(20));
 
-        if (doc.id !== currentUser.uid && (nameMatch || codeMatch)) { 
-          users.push({ uid: doc.id, ...data } as FoundUser);
-        }
-      });
+      const [nameSnapshot, codeSnapshot] = await Promise.all([
+          getDocs(nameQuery),
+          getDocs(codeQuery)
+      ]);
+      
+      const users: FoundUser[] = [];
+      const seenUids = new Set();
+      
+      const processSnapshot = (snapshot: any) => {
+        snapshot.forEach((doc: any) => {
+            if (doc.id !== currentUser.uid && !seenUids.has(doc.id)) {
+                users.push({ uid: doc.id, ...doc.data() } as FoundUser);
+                seenUids.add(doc.id);
+            }
+        });
+      }
+
+      processSnapshot(nameSnapshot);
+      processSnapshot(codeSnapshot);
+
       setUserResults(users);
   }
 
