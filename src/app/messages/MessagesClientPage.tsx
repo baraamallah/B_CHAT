@@ -16,6 +16,7 @@ import {
   doc,
   getDoc,
   writeBatch,
+  setDoc,
 } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -401,14 +402,15 @@ export default function MessagesClientPage() {
                 }
             };
             
-            await setDoc(conversationRef, newConversation).catch(async (serverError) => {
-                const permissionError = new FirestorePermissionError({
-                    path: conversationRef.path,
-                    operation: 'create',
-                    requestResourceData: newConversation
-                });
-                errorEmitter.emit('permission-error', permissionError);
-            });
+            setDoc(conversationRef, newConversation)
+              .catch(async (serverError) => {
+                  const permissionError = new FirestorePermissionError({
+                      path: conversationRef.path,
+                      operation: 'create',
+                      requestResourceData: newConversation
+                  });
+                  errorEmitter.emit('permission-error', permissionError);
+              });
 
             setSelectedConversationId(conversationId);
             // Clear the query param after handling
