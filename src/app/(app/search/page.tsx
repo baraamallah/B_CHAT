@@ -115,9 +115,8 @@ export default function SearchPage() {
       };
 
       const usersRef = collection(db, "users");
-      
       const normalizedQuery = searchQuery.toUpperCase();
-
+      
       const q = query(usersRef, 
         or(
             where("displayName", ">=", searchQuery),
@@ -188,5 +187,3 @@ export default function SearchPage() {
     </div>
   );
 }
-
-    

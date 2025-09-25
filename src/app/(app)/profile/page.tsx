@@ -4,16 +4,16 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Edit, LogOut, UserPlus, Check, X, Wifi, WifiOff, Copy } from "lucide-react";
+import { Edit, LogOut, UserPlus, Check, X, Wifi, WifiOff, Copy, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef } from "react";
 import { auth, db, storage } from "@/lib/firebase";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
-import { doc, getDoc, updateDoc, setDoc, collection, query, where, onSnapshot, arrayUnion, arrayRemove, getDocs, writeBatch, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, updateDoc, setDoc, collection, query, where, onSnapshot, arrayUnion, getDocs, writeBatch, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -78,7 +78,7 @@ function EditProfileDialog({ user, onUpdate }: { user: UserProfile, onUpdate: (d
         const updatedData: Partial<UserProfile> = { displayName, bio, status, photoURL, bgURL };
         
         try {
-            onUpdate(updatedData);
+            await onUpdate(updatedData);
         } catch (error) {
             console.error("Error updating profile: ", error);
         } finally {
@@ -133,8 +133,13 @@ function EditProfileDialog({ user, onUpdate }: { user: UserProfile, onUpdate: (d
 }
 
 function FriendsTab({ currentUser, friendIds }: { currentUser: User, friendIds: string[] }) {
+    const { toast } = useToast();
     const [requests, setRequests] = useState<FriendRequest[]>([]);
     const [friends, setFriends] = useState<Friend[]>([]);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [foundUser, setFoundUser] = useState<Friend | null>(null);
+    const [searchMessage, setSearchMessage] = useState("");
+    const [sentRequests, setSentRequests] = useState<string[]>([]);
 
     useEffect(() => {
         const q = query(collection(db, "friendRequests"), where("to", "==", currentUser.uid), where("status", "==", "pending"));
@@ -161,7 +166,6 @@ function FriendsTab({ currentUser, friendIds }: { currentUser: User, friendIds: 
         fetchFriends();
     }, [friendIds]);
 
-
     const handleRequest = async (requestId: string, fromId: string, accepted: boolean) => {
         const batch = writeBatch(db);
         const requestRef = doc(db, "friendRequests", requestId);
@@ -181,8 +185,105 @@ function FriendsTab({ currentUser, friendIds }: { currentUser: User, friendIds: 
         await batch.commit();
     };
 
+    const handleSearchFriend = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setFoundUser(null);
+        setSearchMessage("");
+        if (!searchQuery.trim()) {
+            setSearchMessage("Please enter a friend code.");
+            return;
+        }
+
+        const q = query(collection(db, "users"), where("friendCode", "==", searchQuery.toUpperCase()));
+        const querySnapshot = await getDocs(q);
+
+        if (querySnapshot.empty) {
+            setSearchMessage("No user found with that friend code.");
+            return;
+        }
+
+        const userDoc = querySnapshot.docs[0];
+        const userData = userDoc.data();
+
+        if (userDoc.id === currentUser.uid) {
+            setSearchMessage("You can't add yourself as a friend.");
+            return;
+        }
+        
+        if (friendIds.includes(userDoc.id)) {
+            setSearchMessage("This user is already your friend.");
+            return;
+        }
+
+        setFoundUser({ uid: userDoc.id, ...userData } as Friend);
+    };
+
+    const handleAddFriend = async (targetUserId: string) => {
+        if (!currentUser) return;
+        
+        const requestId = [currentUser.uid, targetUserId].sort().join('_');
+        const requestDoc = await getDoc(doc(db, 'friendRequests', requestId));
+        
+        if(requestDoc.exists()){
+           toast({ title: "Friend request already sent."});
+           return;
+        }
+
+        const currentUserDoc = await getDoc(doc(db, "users", currentUser.uid));
+        const currentUserData = currentUserDoc.data();
+
+        await setDoc(doc(db, "friendRequests", requestId), {
+          from: currentUser.uid,
+          to: targetUserId,
+          fromName: currentUserData?.displayName,
+          fromPhotoURL: currentUserData?.photoURL,
+          status: "pending",
+          createdAt: serverTimestamp(),
+        });
+
+        setSentRequests(prev => [...prev, targetUserId]);
+        toast({ title: "Friend request sent!" });
+      };
+
+
     return (
         <div className="space-y-6">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Find Friend by Code</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <form onSubmit={handleSearchFriend} className="flex gap-2 mb-4">
+                        <Input 
+                            placeholder="Enter friend code..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                        <Button type="submit"><Search className="h-4 w-4" /></Button>
+                    </form>
+                    {searchMessage && <p className="text-muted-foreground text-sm">{searchMessage}</p>}
+                    {foundUser && (
+                        <div className="flex items-center justify-between mt-4 p-2 rounded-md bg-muted">
+                           <div className="flex items-center gap-3">
+                                <Avatar>
+                                    <AvatarImage src={foundUser.photoURL || 'https://placehold.co/100x100.png'} data-ai-hint="person"/>
+                                    <AvatarFallback>{foundUser.displayName?.charAt(0) || 'U'}</AvatarFallback>
+                                </Avatar>
+                                <span>{foundUser.displayName}</span>
+                            </div>
+                             <Button 
+                                onClick={() => handleAddFriend(foundUser.uid)}
+                                disabled={sentRequests.includes(foundUser.uid)}
+                                size="sm"
+                              >
+                                <UserPlus className="mr-2 h-4 w-4"/>
+                                {sentRequests.includes(foundUser.uid) ? 'Sent' : 'Add Friend'}
+                             </Button>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
             <Card>
                 <CardHeader>
                     <CardTitle>Friend Requests</CardTitle>
@@ -280,9 +381,11 @@ export default function ProfilePage() {
                             lastActive: serverTimestamp(),
                             online: true,
                             role: 'user',
-                            friendCode: generateFriendCode()
+                            friendCode: generateFriendCode(),
+                            dob: "",
+                            phone: "",
                         };
-                        setDoc(userDocRef, newUserProfile, { merge: true }).then(() => {
+                        setDoc(userDocRef, newUserProfile).then(() => {
                             setUser(newUserProfile);
                         });
                     }
@@ -323,8 +426,12 @@ export default function ProfilePage() {
         }
 
         if (user.lastActive) {
-            const lastActiveDate = user.lastActive.toDate();
-            return <div className="flex items-center gap-1 text-sm text-muted-foreground"><WifiOff className="h-4 w-4" /> Last active {formatDistanceToNow(lastActiveDate, { addSuffix: true })}</div>
+            try {
+                const lastActiveDate = user.lastActive.toDate();
+                return <div className="flex items-center gap-1 text-sm text-muted-foreground"><WifiOff className="h-4 w-4" /> Last active {formatDistanceToNow(lastActiveDate, { addSuffix: true })}</div>
+            } catch(e) {
+                 return <div className="flex items-center gap-1 text-sm text-muted-foreground"><WifiOff className="h-4 w-4" /> Last active recently</div>
+            }
         }
         
         return null;
@@ -407,6 +514,12 @@ export default function ProfilePage() {
                                         <p className="text-muted-foreground">{user.dob}</p>
                                     </div>
                                 )}
+                                 {user.phone && (
+                                    <div>
+                                        <h3 className="font-semibold">Phone</h3>
+                                        <p className="text-muted-foreground">{user.phone}</p>
+                                    </div>
+                                )}
                             </div>
                         </CardContent>
                     </Card>
@@ -419,7 +532,3 @@ export default function ProfilePage() {
         </div>
     );
 }
-
-
-    
-    
