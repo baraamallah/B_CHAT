@@ -367,55 +367,75 @@ export default function MessagesClientPage() {
   const startChat = useCallback(async (targetUserId: string, localCurrentUser: User) => {
     // Prevent starting chat with self
     if (localCurrentUser.uid === targetUserId) return;
-
+  
     // Check if a conversation already exists
     const sortedIds = [localCurrentUser.uid, targetUserId].sort();
     const conversationId = sortedIds.join('_');
     const conversationRef = doc(db, 'conversations', conversationId);
-
-    const docSnap = await getDoc(conversationRef);
-
-    if (docSnap.exists()) {
+  
+    try {
+      const docSnap = await getDoc(conversationRef);
+  
+      if (docSnap.exists()) {
         setSelectedConversationId(conversationId);
         router.replace('/messages', undefined);
-    } else {
+      } else {
         // Create a new conversation
         const currentUserDoc = await getDoc(doc(db, 'users', localCurrentUser.uid));
         const targetUserDoc = await getDoc(doc(db, 'users', targetUserId));
-
+  
         if (currentUserDoc.exists() && targetUserDoc.exists()) {
-            const currentUserData = currentUserDoc.data();
-            const targetUserData = targetUserDoc.data();
-
-            const newConversation = {
-                participants: sortedIds,
-                createdAt: serverTimestamp(),
-                participantDetails: {
-                    [localCurrentUser.uid]: {
-                        displayName: currentUserData.displayName,
-                        photoURL: currentUserData.photoURL,
-                    },
-                    [targetUserId]: {
-                        displayName: targetUserData.displayName,
-                        photoURL: targetUserData.photoURL,
-                    }
-                }
-            };
-            
-            setDoc(conversationRef, newConversation)
-              .catch(async (serverError) => {
-                  const permissionError = new FirestorePermissionError({
-                      path: conversationRef.path,
-                      operation: 'create',
-                      requestResourceData: newConversation
-                  });
-                  errorEmitter.emit('permission-error', permissionError);
-              });
-
-            setSelectedConversationId(conversationId);
-            // Clear the query param after handling
-            router.replace('/messages', undefined);
+          const currentUserData = currentUserDoc.data();
+          const targetUserData = targetUserDoc.data();
+  
+          const newConversation = {
+            participants: sortedIds,
+            createdAt: serverTimestamp(),
+            participantDetails: {
+              [localCurrentUser.uid]: {
+                displayName: currentUserData.displayName,
+                photoURL: currentUserData.photoURL,
+              },
+              [targetUserId]: {
+                displayName: targetUserData.displayName,
+                photoURL: targetUserData.photoURL,
+              },
+            },
+          };
+  
+          await setDoc(conversationRef, newConversation);
+          setSelectedConversationId(conversationId);
+          // Clear the query param after handling
+          router.replace('/messages', undefined);
         }
+      }
+    } catch (serverError: any) {
+      if (serverError.code === 'permission-denied') {
+        const currentUserData = (await getDoc(doc(db, 'users', localCurrentUser.uid))).data();
+        const targetUserData = (await getDoc(doc(db, 'users', targetUserId))).data();
+  
+        const newConversationData = {
+           participants: sortedIds,
+           createdAt: 'SERVER_TIMESTAMP', // Placeholder
+           participantDetails: {
+              [localCurrentUser.uid]: {
+                displayName: currentUserData?.displayName,
+                photoURL: currentUserData?.photoURL,
+              },
+              [targetUserId]: {
+                displayName: targetUserData?.displayName,
+                photoURL: targetUserData?.photoURL,
+              },
+            },
+        }
+  
+        const permissionError = new FirestorePermissionError({
+          path: conversationRef.path,
+          operation: 'create',
+          requestResourceData: newConversationData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      }
     }
   }, [router]);
 
@@ -526,3 +546,5 @@ export default function MessagesClientPage() {
     </div>
   );
 }
+
+    
