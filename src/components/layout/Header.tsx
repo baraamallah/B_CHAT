@@ -1,7 +1,7 @@
 
 'use client';
 
-import { LogOut, Menu, Search } from 'lucide-react';
+import { LogOut, Menu, Search, Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -19,6 +19,25 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useSidebar } from '../ui/sidebar';
 import { Input } from '../ui/input';
+import { useTheme } from "next-themes";
+
+
+function ThemeToggle() {
+  const { setTheme, theme } = useTheme()
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+    >
+      <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+      <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+      <span className="sr-only">Toggle theme</span>
+    </Button>
+  )
+}
+
 
 export default function Header() {
     const router = useRouter();
@@ -51,6 +70,7 @@ export default function Header() {
               className="w-full rounded-lg bg-background pl-8 md:w-[200px] lg:w-[320px]"
             />
         </div>
+        <ThemeToggle />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="icon" className="overflow-hidden rounded-full">

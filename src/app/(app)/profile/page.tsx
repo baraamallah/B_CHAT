@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { auth, db, storage } from "@/lib/firebase";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { doc, getDoc, updateDoc, setDoc, collection, query, where, onSnapshot, arrayUnion, arrayRemove, getDocs, writeBatch, serverTimestamp } from "firebase/firestore";
@@ -32,6 +32,7 @@ interface UserProfile {
     friends?: string[];
     lastActive?: any;
     online?: boolean;
+    role?: 'user' | 'admin';
 }
 
 interface FriendRequest {
@@ -131,7 +132,7 @@ function EditProfileDialog({ user, onUpdate }: { user: UserProfile, onUpdate: (d
     );
 }
 
-function FriendsTab({ currentUser }: { currentUser: User }) {
+function FriendsTab({ currentUser, friendIds }: { currentUser: User, friendIds: string[] }) {
     const [requests, setRequests] = useState<FriendRequest[]>([]);
     const [friends, setFriends] = useState<Friend[]>([]);
 
@@ -145,22 +146,20 @@ function FriendsTab({ currentUser }: { currentUser: User }) {
     }, [currentUser.uid]);
 
      useEffect(() => {
-        if (!currentUser) return;
-        const unsub = onSnapshot(doc(db, 'users', currentUser.uid), async (userDoc) => {
-            const userData = userDoc.data() as UserProfile;
-            if (userData && userData.friends && userData.friends.length > 0) {
-                const friendPromises = userData.friends.map(friendId => getDoc(doc(db, 'users', friendId)));
-                const friendDocs = await Promise.all(friendPromises);
-                const friendData = friendDocs
-                    .filter(fDoc => fDoc.exists())
-                    .map(fDoc => ({ uid: fDoc.id, ...fDoc.data() } as Friend));
-                setFriends(friendData);
-            } else {
-                setFriends([]);
-            }
-        });
-        return () => unsub();
-    }, [currentUser.uid]);
+        if (!friendIds || friendIds.length === 0) {
+            setFriends([]);
+            return;
+        }
+        const fetchFriends = async () => {
+            const friendPromises = friendIds.map(friendId => getDoc(doc(db, 'users', friendId)));
+            const friendDocs = await Promise.all(friendPromises);
+            const friendData = friendDocs
+                .filter(fDoc => fDoc.exists())
+                .map(fDoc => ({ uid: fDoc.id, ...fDoc.data() } as Friend));
+            setFriends(friendData);
+        }
+        fetchFriends();
+    }, [friendIds]);
 
 
     const handleRequest = async (requestId: string, fromId: string, accepted: boolean) => {
@@ -258,7 +257,7 @@ export default function ProfilePage() {
                 
                 const unsub = onSnapshot(userDocRef, (doc) => {
                     if (doc.exists()) {
-                        setUser(doc.data() as UserProfile);
+                        setUser({uid: doc.id, ...doc.data()} as UserProfile);
                     } else {
                         // This logic handles creation of user profile if it doesn't exist
                         const newUserProfile: UserProfile = {
@@ -272,6 +271,7 @@ export default function ProfilePage() {
                             friends: [],
                             lastActive: serverTimestamp(),
                             online: true,
+                            role: 'user',
                         };
                         setDoc(userDocRef, newUserProfile).then(() => {
                             setUser(newUserProfile);
@@ -295,9 +295,6 @@ export default function ProfilePage() {
         if (auth.currentUser) {
             const userDocRef = doc(db, "users", auth.currentUser.uid);
             await updateDoc(userDocRef, data);
-            // The onSnapshot listener will automatically update the state,
-            // so manual state update here is redundant.
-            // setUser(prevUser => prevUser ? { ...prevUser, ...data } : null);
         }
     };
 
@@ -328,6 +325,8 @@ export default function ProfilePage() {
     if (loading || !user || !currentUser) {
         return <div className="flex justify-center items-center h-screen">Loading...</div>;
     }
+    
+    const friendIds = user.friends || [];
 
     return (
         <div className="space-y-6">
@@ -368,21 +367,18 @@ export default function ProfilePage() {
                             <p className="text-muted-foreground">
                                 {user.bio || "This user hasn't written a bio yet."}
                             </p>
-                            <div className="mt-4">
+                            <div className="mt-4 flex gap-2 items-center">
                                 <Badge variant="secondary">{user.email}</Badge>
+                                {user.role === 'admin' && <Badge variant="destructive">Admin</Badge>}
                             </div>
                         </CardContent>
                     </Card>
                 </TabsContent>
                 <TabsContent value="friends" className="mt-6">
-                   <FriendsTab currentUser={currentUser} />
+                   <FriendsTab currentUser={currentUser} friendIds={friendIds} />
                 </TabsContent>
             </Tabs>
 
         </div>
     );
 }
-
-    
-
-    

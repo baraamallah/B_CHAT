@@ -17,7 +17,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { auth, db } from "@/lib/firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { setDoc, doc } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 
 export default function SignupPage() {
     const router = useRouter();
@@ -37,9 +37,13 @@ export default function SignupPage() {
                 email: user.email,
                 displayName: fullName,
                 bio: "",
-                status: "",
+                status: "I'm new here!",
                 photoURL: "",
-                bgURL: ""
+                bgURL: "",
+                friends: [],
+                lastActive: serverTimestamp(),
+                online: true,
+                role: "user", // Assign default role
             });
             router.push('/profile');
         } catch (err: any) {
@@ -93,4 +97,3 @@ export default function SignupPage() {
     </Card>
   );
 }
-
