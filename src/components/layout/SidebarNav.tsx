@@ -6,8 +6,7 @@ import { User, MessageSquare, Search } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { SidebarHeader, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from '@/components/ui/sidebar';
-import { motion } from 'framer-motion';
-import { useState } from 'react';
+import { motion } from "framer-motion";
 
 const navItems = [
   { href: '/profile', icon: User, label: 'Profile' },
