@@ -470,7 +470,7 @@ export default function MessagesClientPage() {
       setLoadingConversations(false);
     }, async (error) => {
         const permissionError = new FirestorePermissionError({
-            path: q.toString(), // Note: This isn't perfect, but gives a hint
+            path: 'conversations',
             operation: 'list'
         });
         errorEmitter.emit('permission-error', permissionError);

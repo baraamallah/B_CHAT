@@ -1,27 +1,38 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-  
-    // Users can only read/write their own profile
-    match /users/{userId} {
-      allow read: if request.auth != null;
-      allow create, update: if request.auth.uid == userId;
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    // Friend Requests
-    match /friendRequests/{requestId} {
-      allow read: if request.auth.uid == resource.data.to;
-      allow create: if request.auth.uid == request.resource.data.from;
-      allow update, delete: if request.auth.uid == resource.data.to;
+    function isOwner(userId) {
+      return request.auth.uid == userId;
     }
-    
-    // Conversations and Messages
+
+    // USERS
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isOwner(userId);
+    }
+
+    // FRIEND REQUESTS
+    match /friendRequests/{requestId} {
+      allow read: if isSignedIn() && request.auth.uid == resource.data.to;
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && request.auth.uid == resource.data.to;
+    }
+
+    // CONVERSATIONS
     match /conversations/{conversationId} {
-      allow read, write: if request.auth.uid in resource.data.participants;
+      allow read, write: if isSignedIn() && request.auth.uid in resource.data.participants;
       
+      // MESSAGES (subcollection)
       match /messages/{messageId} {
-        allow read, write: if request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+        allow read, write: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
       }
     }
   }
