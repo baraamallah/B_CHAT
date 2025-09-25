@@ -1,7 +1,9 @@
+
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import { ThemeProvider } from '@/components/theme-provider';
+import { FirebaseProvider } from '@/firebase/provider';
 
 export const metadata: Metadata = {
   title: 'BCHAT',
@@ -27,8 +29,10 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
         >
-          {children}
-          <Toaster />
+          <FirebaseProvider>
+            {children}
+            <Toaster />
+          </FirebaseProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -25,6 +25,8 @@ import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import Linkify from "react-linkify";
 import Header from "@/components/layout/Header";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 interface UserProfile {
     uid: string;
@@ -86,7 +88,7 @@ function EditProfileDialog({ user, onUpdate }: { user: UserProfile, onUpdate: (d
         const updatedData: Partial<UserProfile> = { displayName, bio, status, photoURL, bgURL, dob, phone, private: isPrivate };
         
         try {
-            await onUpdate(updatedData);
+            onUpdate(updatedData);
         } catch (error) {
             console.error("Error updating profile: ", error);
         } finally {
@@ -170,6 +172,12 @@ function FriendsTab({ currentUser, friendIds, profileIsPrivate }: { currentUser:
             const reqs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FriendRequest));
             setRequests(reqs);
             setLoadingRequests(false);
+        }, async (error) => {
+            const permissionError = new FirestorePermissionError({
+              path: q.toString(),
+              operation: 'list',
+            });
+            errorEmitter.emit('permission-error', permissionError);
         });
         return () => unsubscribe();
     }, [currentUser.uid]);
@@ -209,7 +217,13 @@ function FriendsTab({ currentUser, friendIds, profileIsPrivate }: { currentUser:
         } else {
             batch.delete(requestRef);
         }
-        await batch.commit();
+        await batch.commit().catch(async (serverError) => {
+            const permissionError = new FirestorePermissionError({
+              path: requestRef.path,
+              operation: accepted ? 'update' : 'delete',
+            });
+            errorEmitter.emit('permission-error', permissionError);
+          });
     };
 
     const handleSearchFriend = async (e: React.FormEvent) => {
@@ -249,7 +263,9 @@ function FriendsTab({ currentUser, friendIds, profileIsPrivate }: { currentUser:
         if (!currentUser) return;
         
         const requestId = [currentUser.uid, targetUserId].sort().join('_');
-        const requestDoc = await getDoc(doc(db, 'friendRequests', requestId));
+        const requestRef = doc(db, 'friendRequests', requestId);
+        
+        const requestDoc = await getDoc(requestRef);
         
         if(requestDoc.exists()){
            toast({ title: "Friend request already sent."});
@@ -259,17 +275,28 @@ function FriendsTab({ currentUser, friendIds, profileIsPrivate }: { currentUser:
         const currentUserDoc = await getDoc(doc(db, "users", currentUser.uid));
         const currentUserData = currentUserDoc.data();
 
-        await setDoc(doc(db, "friendRequests", requestId), {
+        const newRequest = {
           from: currentUser.uid,
           to: targetUserId,
           fromName: currentUserData?.displayName,
           fromPhotoURL: currentUserData?.photoURL,
           status: "pending",
           createdAt: serverTimestamp(),
-        });
+        };
 
-        setSentRequests(prev => [...prev, targetUserId]);
-        toast({ title: "Friend request sent!" });
+        setDoc(requestRef, newRequest)
+          .then(() => {
+            setSentRequests(prev => [...prev, targetUserId]);
+            toast({ title: "Friend request sent!" });
+          })
+          .catch(async (serverError) => {
+            const permissionError = new FirestorePermissionError({
+              path: requestRef.path,
+              operation: 'create',
+              requestResourceData: newRequest,
+            });
+            errorEmitter.emit('permission-error', permissionError);
+          });
       };
 
 
@@ -439,6 +466,12 @@ function ProfilePageContent() {
                         });
                     }
                      setLoading(false);
+                }, async (error) => {
+                    const permissionError = new FirestorePermissionError({
+                      path: userDocRef.path,
+                      operation: 'get',
+                    });
+                    errorEmitter.emit('permission-error', permissionError);
                 });
 
                 return () => unsub();
@@ -454,8 +487,18 @@ function ProfilePageContent() {
     const handleUpdateProfile = async (data: Partial<UserProfile>) => {
         if (auth.currentUser) {
             const userDocRef = doc(db, "users", auth.currentUser.uid);
-            await updateDoc(userDocRef, data);
-            toast({title: "Profile updated successfully!"});
+            updateDoc(userDocRef, data)
+                .then(() => {
+                    toast({title: "Profile updated successfully!"});
+                })
+                .catch(async (serverError) => {
+                    const permissionError = new FirestorePermissionError({
+                        path: userDocRef.path,
+                        operation: 'update',
+                        requestResourceData: data,
+                    });
+                    errorEmitter.emit('permission-error', permissionError);
+                });
         }
     };
 

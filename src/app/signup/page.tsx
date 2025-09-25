@@ -20,6 +20,8 @@ import { auth, db } from "@/lib/firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { Logo } from "@/components/icons/Logo";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 // Function to generate a random friend code
 const generateFriendCode = () => {
@@ -49,9 +51,7 @@ export default function SignupPage() {
             const user = userCredential.user;
 
             const friendCode = generateFriendCode();
-            // In a real app, you'd want to ensure this code is unique in your database.
-
-            await setDoc(doc(db, "users", user.uid), {
+            const newUserProfile = {
                 uid: user.uid,
                 email: user.email,
                 displayName: fullName,
@@ -67,8 +67,24 @@ export default function SignupPage() {
                 online: true,
                 role: "user", // Assign default role
                 private: false,
-            });
-            router.push('/profile');
+            };
+
+            const userDocRef = doc(db, "users", user.uid);
+            
+            setDoc(userDocRef, newUserProfile)
+                .then(() => {
+                    router.push('/profile');
+                })
+                .catch(async (serverError) => {
+                    const permissionError = new FirestorePermissionError({
+                        path: userDocRef.path,
+                        operation: 'create',
+                        requestResourceData: newUserProfile,
+                    });
+                    errorEmitter.emit('permission-error', permissionError);
+                    setError("Failed to create user profile. You may not have the required permissions.");
+                });
+
         } catch (err: any) {
             setError(err.message);
         }

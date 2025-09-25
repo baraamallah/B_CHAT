@@ -15,6 +15,8 @@ import Link from "next/link";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/layout/Header";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 interface FoundUser {
   uid: string;
@@ -32,9 +34,10 @@ function UserResults({ users, currentUser }: { users: FoundUser[], currentUser: 
   const handleAddFriend = async (targetUserId: string) => {
     if (!currentUser) return;
     
-    // Check if a request already exists
     const requestId = [currentUser.uid, targetUserId].sort().join('_');
-    const requestDoc = await getDoc(doc(db, 'friendRequests', requestId));
+    const requestRef = doc(db, 'friendRequests', requestId);
+    
+    const requestDoc = await getDoc(requestRef);
     
     if(requestDoc.exists()){
        toast({ title: "Friend request already sent."});
@@ -44,17 +47,28 @@ function UserResults({ users, currentUser }: { users: FoundUser[], currentUser: 
     const currentUserDoc = await getDoc(doc(db, "users", currentUser.uid));
     const currentUserData = currentUserDoc.data();
 
-    await setDoc(doc(db, "friendRequests", requestId), {
+    const newRequest = {
       from: currentUser.uid,
       to: targetUserId,
       fromName: currentUserData?.displayName,
       fromPhotoURL: currentUserData?.photoURL,
       status: "pending",
       createdAt: serverTimestamp(),
-    });
+    };
 
-    setSentRequests(prev => [...prev, targetUserId]);
-    toast({ title: "Friend request sent!" });
+    setDoc(requestRef, newRequest)
+      .then(() => {
+        setSentRequests(prev => [...prev, targetUserId]);
+        toast({ title: "Friend request sent!" });
+      })
+      .catch(async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: requestRef.path,
+          operation: 'create',
+          requestResourceData: newRequest,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      });
   };
   
   if (users.length === 0) {
