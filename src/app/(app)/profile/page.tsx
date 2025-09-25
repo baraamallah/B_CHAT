@@ -4,7 +4,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Edit, LogOut, UserPlus, Check, X, Wifi, WifiOff, Copy, Search } from "lucide-react";
+import { Edit, LogOut, UserPlus, Check, X, Wifi, WifiOff, Copy, Search, Lock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -15,12 +15,14 @@ import { auth, db, storage } from "@/lib/firebase";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { doc, getDoc, updateDoc, setDoc, collection, query, where, onSnapshot, arrayUnion, getDocs, writeBatch, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
-
+import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
+import Linkify from "react-linkify";
 
 interface UserProfile {
     uid: string;
@@ -37,6 +39,7 @@ interface UserProfile {
     friendCode?: string;
     dob?: string;
     phone?: string;
+    private?: boolean;
 }
 
 interface FriendRequest {
@@ -70,6 +73,7 @@ function EditProfileDialog({ user, onUpdate }: { user: UserProfile, onUpdate: (d
     const [status, setStatus] = useState(user.status);
     const [dob, setDob] = useState(user.dob);
     const [phone, setPhone] = useState(user.phone);
+    const [isPrivate, setIsPrivate] = useState(user.private || false);
     const [photoURL, setPhotoURL] = useState(user.photoURL);
     const [bgURL, setBgURL] = useState(user.bgURL);
     const [isSaving, setIsSaving] = useState(false);
@@ -77,7 +81,7 @@ function EditProfileDialog({ user, onUpdate }: { user: UserProfile, onUpdate: (d
     const handleSave = async () => {
         if (!auth.currentUser) return;
         setIsSaving(true);
-        const updatedData: Partial<UserProfile> = { displayName, bio, status, photoURL, bgURL, dob, phone };
+        const updatedData: Partial<UserProfile> = { displayName, bio, status, photoURL, bgURL, dob, phone, private: isPrivate };
         
         try {
             await onUpdate(updatedData);
@@ -93,11 +97,11 @@ function EditProfileDialog({ user, onUpdate }: { user: UserProfile, onUpdate: (d
             <DialogTrigger asChild>
                 <Button variant="outline"><Edit className="mr-2 h-4 w-4" />Edit Profile</Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
                     <DialogTitle>Edit Profile</DialogTitle>
                 </DialogHeader>
-                <div className="grid gap-4 py-4">
+                <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
                     <div className="grid gap-2">
                         <Label htmlFor="displayName">Display Name</Label>
                         <Input id="displayName" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
@@ -126,6 +130,10 @@ function EditProfileDialog({ user, onUpdate }: { user: UserProfile, onUpdate: (d
                         <Label htmlFor="bgURL">Background Image URL</Label>
                         <Input id="bgURL" value={bgURL} onChange={(e) => setBgURL(e.target.value)} placeholder="https://example.com/image.png" />
                     </div>
+                    <div className="flex items-center space-x-2 mt-2">
+                        <Switch id="private-profile" checked={isPrivate} onCheckedChange={setIsPrivate} />
+                        <Label htmlFor="private-profile">Private Profile</Label>
+                    </div>
                 </div>
                 <DialogFooter>
                     <DialogClose asChild>
@@ -142,7 +150,7 @@ function EditProfileDialog({ user, onUpdate }: { user: UserProfile, onUpdate: (d
     );
 }
 
-function FriendsTab({ currentUser, friendIds }: { currentUser: User, friendIds: string[] }) {
+function FriendsTab({ currentUser, friendIds, profileIsPrivate }: { currentUser: User, friendIds: string[], profileIsPrivate: boolean }) {
     const { toast } = useToast();
     const [requests, setRequests] = useState<FriendRequest[]>([]);
     const [friends, setFriends] = useState<Friend[]>([]);
@@ -150,12 +158,16 @@ function FriendsTab({ currentUser, friendIds }: { currentUser: User, friendIds: 
     const [foundUser, setFoundUser] = useState<Friend | null>(null);
     const [searchMessage, setSearchMessage] = useState("");
     const [sentRequests, setSentRequests] = useState<string[]>([]);
+    const [loadingRequests, setLoadingRequests] = useState(true);
+    const [loadingFriends, setLoadingFriends] = useState(true);
 
     useEffect(() => {
+        setLoadingRequests(true);
         const q = query(collection(db, "friendRequests"), where("to", "==", currentUser.uid), where("status", "==", "pending"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const reqs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FriendRequest));
             setRequests(reqs);
+            setLoadingRequests(false);
         });
         return () => unsubscribe();
     }, [currentUser.uid]);
@@ -163,8 +175,10 @@ function FriendsTab({ currentUser, friendIds }: { currentUser: User, friendIds: 
      useEffect(() => {
         if (!friendIds || friendIds.length === 0) {
             setFriends([]);
+            setLoadingFriends(false);
             return;
         }
+        setLoadingFriends(true);
         const fetchFriends = async () => {
             const friendPromises = friendIds.map(friendId => getDoc(doc(db, 'users', friendId)));
             const friendDocs = await Promise.all(friendPromises);
@@ -172,6 +186,7 @@ function FriendsTab({ currentUser, friendIds }: { currentUser: User, friendIds: 
                 .filter(fDoc => fDoc.exists())
                 .map(fDoc => ({ uid: fDoc.id, ...fDoc.data() } as Friend));
             setFriends(friendData);
+            setLoadingFriends(false);
         }
         fetchFriends();
     }, [friendIds]);
@@ -299,7 +314,12 @@ function FriendsTab({ currentUser, friendIds }: { currentUser: User, friendIds: 
                     <CardTitle>Friend Requests</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    {requests.length > 0 ? (
+                    {loadingRequests ? (
+                        <div className="space-y-4">
+                            <Skeleton className="h-12 w-full" />
+                            <Skeleton className="h-12 w-full" />
+                        </div>
+                    ) : requests.length > 0 ? (
                         <ul className="space-y-4">
                             {requests.map(req => (
                                 <li key={req.id} className="flex items-center justify-between">
@@ -327,7 +347,13 @@ function FriendsTab({ currentUser, friendIds }: { currentUser: User, friendIds: 
                     <CardTitle>My Friends</CardTitle>
                 </CardHeader>
                 <CardContent>
-                   {friends.length > 0 ? (
+                   {loadingFriends ? (
+                       <div className="space-y-4">
+                            <Skeleton className="h-12 w-full" />
+                            <Skeleton className="h-12 w-full" />
+                            <Skeleton className="h-12 w-full" />
+                        </div>
+                   ) : friends.length > 0 ? (
                         <ul className="space-y-4">
                             {friends.map(friend => (
                                 <li key={friend.uid} className="flex items-center justify-between">
@@ -360,24 +386,32 @@ export default function ProfilePage() {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const router = useRouter();
     const { toast } = useToast();
+    const searchParams = useSearchParams();
+    const [profileUser, setProfileUser] = useState<UserProfile | null>(null);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
             if (fbUser) {
                 setCurrentUser(fbUser);
-                const userDocRef = doc(db, "users", fbUser.uid);
+
+                const profileId = searchParams.get('id') || fbUser.uid;
+                const userDocRef = doc(db, "users", profileId);
                 
-                const unsub = onSnapshot(userDocRef, (doc) => {
-                    if (doc.exists()) {
-                        const userData = doc.data();
-                        if(!userData.friendCode) {
-                            const friendCode = generateFriendCode();
-                            updateDoc(userDocRef, {friendCode});
-                            setUser({uid: doc.id, ...userData, friendCode } as UserProfile);
-                        } else {
-                            setUser({uid: doc.id, ...userData} as UserProfile);
+                const unsub = onSnapshot(userDocRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        const userData = docSnap.data() as UserProfile;
+                         if (profileId === fbUser.uid) {
+                             if(!userData.friendCode) {
+                                const friendCode = generateFriendCode();
+                                updateDoc(userDocRef, {friendCode});
+                                setUser({uid: docSnap.id, ...userData, friendCode });
+                            } else {
+                                setUser({uid: docSnap.id, ...userData});
+                            }
                         }
-                    } else {
+                        setProfileUser({uid: docSnap.id, ...userData});
+
+                    } else if (profileId === fbUser.uid) {
                         // This logic handles creation of user profile if it doesn't exist
                          const friendCode = generateFriendCode();
                          const newUserProfile: UserProfile = {
@@ -395,9 +429,11 @@ export default function ProfilePage() {
                             friendCode: friendCode,
                             dob: "",
                             phone: "",
+                            private: false,
                         };
                         setDoc(userDocRef, newUserProfile).then(() => {
                             setUser(newUserProfile);
+                            setProfileUser(newUserProfile);
                         });
                     }
                      setLoading(false);
@@ -412,7 +448,7 @@ export default function ProfilePage() {
         });
 
         return () => unsubscribe();
-    }, [router]);
+    }, [router, searchParams]);
 
     const handleUpdateProfile = async (data: Partial<UserProfile>) => {
         if (auth.currentUser) {
@@ -431,15 +467,15 @@ export default function ProfilePage() {
     }
     
     const renderStatus = () => {
-        if (!user) return null;
+        if (!profileUser) return null;
 
-        if (user.online) {
+        if (profileUser.online) {
             return <div className="flex items-center gap-1 text-sm text-green-500"><Wifi className="h-4 w-4" /> Online</div>
         }
 
-        if (user.lastActive) {
+        if (profileUser.lastActive) {
             try {
-                const lastActiveDate = user.lastActive.toDate();
+                const lastActiveDate = profileUser.lastActive.toDate();
                 return <div className="flex items-center gap-1 text-sm text-muted-foreground"><WifiOff className="h-4 w-4" /> Last active {formatDistanceToNow(lastActiveDate, { addSuffix: true })}</div>
             } catch(e) {
                  return <div className="flex items-center gap-1 text-sm text-muted-foreground"><WifiOff className="h-4 w-4" /> Last active recently</div>
@@ -457,36 +493,99 @@ export default function ProfilePage() {
     }
 
 
-    if (loading || !user || !currentUser) {
-        return <div className="flex justify-center items-center h-screen">Loading...</div>;
+    if (loading || !profileUser || !currentUser) {
+        return (
+            <div className="space-y-6">
+                <Card className="mb-8 overflow-hidden">
+                    <Skeleton className="h-48 w-full" />
+                    <CardContent className="p-6">
+                         <div className="flex flex-col md:flex-row items-center gap-6 -mt-16">
+                            <Skeleton className="h-24 w-24 rounded-full border-4 border-card" />
+                            <div className="flex-1 text-center md:text-left mt-4 md:mt-0">
+                                <Skeleton className="h-8 w-48 mb-2" />
+                                <Skeleton className="h-4 w-32" />
+                            </div>
+                         </div>
+                    </CardContent>
+                </Card>
+                 <Tabs defaultValue="about">
+                    <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="about">About Me</TabsTrigger>
+                        <TabsTrigger value="friends">Friends</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="about" className="mt-6">
+                       <Card>
+                           <CardHeader><Skeleton className="h-8 w-32" /></CardHeader>
+                           <CardContent className="space-y-4">
+                               <Skeleton className="h-16 w-full" />
+                               <Skeleton className="h-10 w-1/2" />
+                               <Skeleton className="h-10 w-1/2" />
+                           </CardContent>
+                       </Card>
+                    </TabsContent>
+                 </Tabs>
+            </div>
+        );
     }
     
-    const friendIds = user.friends || [];
+    const isOwnProfile = profileUser.uid === currentUser.uid;
+    const isFriend = isOwnProfile || (user?.friends?.includes(profileUser.uid) ?? false);
+    const isPrivateAndNotFriend = profileUser.private && !isFriend;
+
+    if (isPrivateAndNotFriend) {
+        return (
+             <div className="space-y-6">
+                <Card className="mb-8 overflow-hidden">
+                    <div style={{ backgroundImage: `url(${profileUser.bgURL || 'https://placehold.co/1200x300.png'})`, backgroundSize: 'cover', backgroundPosition: 'center' }} className="h-48 w-full bg-muted blur-sm" data-ai-hint="abstract background"></div>
+                    <CardContent className="p-6">
+                        <div className="flex flex-col md:flex-row items-center gap-6 -mt-16">
+                            <Avatar className="h-24 w-24 border-4 border-card ring-2 ring-primary">
+                                <AvatarImage src={profileUser.photoURL || "https://placehold.co/200x200.png"} data-ai-hint="person portrait" />
+                                <AvatarFallback>{profileUser.displayName.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 text-center md:text-left mt-4 md:mt-0">
+                                <h1 className="text-2xl font-bold">{profileUser.displayName}</h1>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+                <Card className="text-center p-8">
+                    <Lock className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+                    <h2 className="text-2xl font-semibold">This profile is private</h2>
+                    <p className="text-muted-foreground">You must be friends with {profileUser.displayName} to view their profile.</p>
+                </Card>
+            </div>
+        )
+    }
+
+    const friendIds = profileUser.friends || [];
 
     return (
         <div className="space-y-6">
             <Card className="mb-8 overflow-hidden">
-                <div style={{ backgroundImage: `url(${user.bgURL || 'https://placehold.co/1200x300.png'})`, backgroundSize: 'cover', backgroundPosition: 'center' }} className="h-48 w-full bg-muted" data-ai-hint="abstract background"></div>
+                <div style={{ backgroundImage: `url(${profileUser.bgURL || 'https://placehold.co/1200x300.png'})`, backgroundSize: 'cover', backgroundPosition: 'center' }} className="h-48 w-full bg-muted" data-ai-hint="abstract background"></div>
                 <CardContent className="p-6">
                     <div className="flex flex-col md:flex-row items-center gap-6 -mt-16">
                         <Avatar className="h-24 w-24 border-4 border-card ring-2 ring-primary">
-                            <AvatarImage src={user.photoURL || "https://placehold.co/200x200.png"} data-ai-hint="person portrait" />
-                            <AvatarFallback>{user.displayName.charAt(0)}</AvatarFallback>
+                            <AvatarImage src={profileUser.photoURL || "https://placehold.co/200x200.png"} data-ai-hint="person portrait" />
+                            <AvatarFallback>{profileUser.displayName.charAt(0)}</AvatarFallback>
                         </Avatar>
                         <div className="flex-1 text-center md:text-left mt-4 md:mt-0">
                             <div className="flex items-center justify-center md:justify-start gap-2">
-                               <h1 className="text-2xl font-bold">{user.displayName}</h1>
-                               {user.role === 'admin' && <Badge variant="destructive">Admin</Badge>}
+                               <h1 className="text-2xl font-bold">{profileUser.displayName}</h1>
+                               {profileUser.role === 'admin' && <Badge variant="destructive">Admin</Badge>}
                             </div>
-                            <p className="text-muted-foreground italic">"{user.status}"</p>
+                            <p className="text-muted-foreground italic">"{profileUser.status}"</p>
                             <div className="mt-2">
                                 {renderStatus()}
                             </div>
                         </div>
-                        <div className="flex gap-2">
-                            <EditProfileDialog user={user} onUpdate={handleUpdateProfile} />
-                            <Button variant="outline" onClick={handleLogout}><LogOut className="mr-2 h-4 w-4"/>Logout</Button>
-                        </div>
+                        {isOwnProfile && user && (
+                            <div className="flex gap-2">
+                                <EditProfileDialog user={user} onUpdate={handleUpdateProfile} />
+                                <Button variant="outline" onClick={handleLogout}><LogOut className="mr-2 h-4 w-4"/>Logout</Button>
+                            </div>
+                        )}
                     </div>
                 </CardContent>
             </Card>
@@ -505,31 +604,39 @@ export default function ProfilePage() {
                              <div className="space-y-4">
                                 <div>
                                     <h3 className="font-semibold">Bio</h3>
-                                    <p className="text-muted-foreground">
-                                        {user.bio || "This user hasn't written a bio yet."}
+                                    <p className="text-muted-foreground whitespace-pre-wrap">
+                                        <Linkify componentDecorator={(decoratedHref, decoratedText, key) => (
+                                            <a target="blank" href={decoratedHref} key={key} className="text-primary hover:underline">
+                                                {decoratedText}
+                                            </a>
+                                        )}>
+                                            {profileUser.bio || "This user hasn't written a bio yet."}
+                                        </Linkify>
                                     </p>
                                 </div>
+                                {isOwnProfile && (
                                 <div>
                                     <h3 className="font-semibold">Friend Code</h3>
                                      <div className="flex items-center gap-2">
-                                        <p className="text-muted-foreground font-mono bg-muted px-2 py-1 rounded-md">{user.friendCode || 'No code'}</p>
+                                        <p className="text-muted-foreground font-mono bg-muted px-2 py-1 rounded-md">{profileUser.friendCode || 'No code'}</p>
                                         <Button variant="ghost" size="icon" onClick={handleCopyFriendCode}><Copy className="h-4 w-4" /></Button>
                                     </div>
                                 </div>
+                                )}
                                 <div>
                                     <h3 className="font-semibold">Email</h3>
-                                    <p className="text-muted-foreground">{user.email}</p>
+                                    <p className="text-muted-foreground">{profileUser.email}</p>
                                 </div>
-                                {user.dob && (
+                                {profileUser.dob && (
                                     <div>
                                         <h3 className="font-semibold">Birthday</h3>
-                                        <p className="text-muted-foreground">{user.dob}</p>
+                                        <p className="text-muted-foreground">{profileUser.dob}</p>
                                     </div>
                                 )}
-                                 {user.phone && (
+                                 {profileUser.phone && (
                                     <div>
                                         <h3 className="font-semibold">Phone</h3>
-                                        <p className="text-muted-foreground">{user.phone}</p>
+                                        <p className="text-muted-foreground">{profileUser.phone}</p>
                                     </div>
                                 )}
                             </div>
@@ -537,10 +644,11 @@ export default function ProfilePage() {
                     </Card>
                 </TabsContent>
                 <TabsContent value="friends" className="mt-6">
-                   <FriendsTab currentUser={currentUser} friendIds={friendIds} />
+                   <FriendsTab currentUser={currentUser} friendIds={friendIds} profileIsPrivate={profileUser.private ?? false} />
                 </TabsContent>
             </Tabs>
 
         </div>
     );
 }
+

@@ -64,6 +64,7 @@ export default function SignupPage() {
                 lastActive: serverTimestamp(),
                 online: true,
                 role: "user", // Assign default role
+                private: false,
             });
             router.push('/profile');
         } catch (err: any) {
@@ -125,3 +126,4 @@ export default function SignupPage() {
     </Card>
   );
 }
+
