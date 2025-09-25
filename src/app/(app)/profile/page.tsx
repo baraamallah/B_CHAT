@@ -53,32 +53,17 @@ function EditProfileDialog({ user, onUpdate }: { user: UserProfile, onUpdate: (d
     const [displayName, setDisplayName] = useState(user.displayName);
     const [bio, setBio] = useState(user.bio);
     const [status, setStatus] = useState(user.status);
-    const profilePicRef = useRef<HTMLInputElement>(null);
-    const bgRef = useRef<HTMLInputElement>(null);
-    const [profilePicFile, setProfilePicFile] = useState<File | null>(null);
-    const [bgFile, setBgFile] = useState<File | null>(null);
+    const [photoURL, setPhotoURL] = useState(user.photoURL);
+    const [bgURL, setBgURL] = useState(user.bgURL);
     const [isSaving, setIsSaving] = useState(false);
 
     const handleSave = async () => {
         if (!auth.currentUser) return;
         setIsSaving(true);
-        const updatedData: Partial<UserProfile> = { displayName, bio, status };
+        const updatedData: Partial<UserProfile> = { displayName, bio, status, photoURL, bgURL };
         
         try {
-            if (profilePicFile) {
-                const storageRef = ref(storage, `profile_pictures/${auth.currentUser.uid}`);
-                await uploadBytes(storageRef, profilePicFile);
-                updatedData.photoURL = await getDownloadURL(storageRef);
-            }
-
-            if (bgFile) {
-                const storageRef = ref(storage, `backgrounds/${auth.currentUser.uid}`);
-                await uploadBytes(storageRef, bgFile);
-                updatedData.bgURL = await getDownloadURL(storageRef);
-            }
-            
             onUpdate(updatedData);
-
         } catch (error) {
             console.error("Error updating profile: ", error);
         } finally {
@@ -108,13 +93,13 @@ function EditProfileDialog({ user, onUpdate }: { user: UserProfile, onUpdate: (d
                         <Label htmlFor="bio">Bio</Label>
                         <Textarea id="bio" value={bio} onChange={(e) => setBio(e.target.value)} />
                     </div>
-                    <div className="grid gap-2">
-                        <Label>Profile Picture</Label>
-                        <Input type="file" ref={profilePicRef} onChange={(e) => setProfilePicFile(e.target.files?.[0] || null)} accept="image/*" />
+                     <div className="grid gap-2">
+                        <Label htmlFor="photoURL">Profile Picture URL</Label>
+                        <Input id="photoURL" value={photoURL} onChange={(e) => setPhotoURL(e.target.value)} placeholder="https://example.com/image.png" />
                     </div>
                     <div className="grid gap-2">
-                        <Label>Background Image</Label>
-                        <Input type="file" ref={bgRef} onChange={(e) => setBgFile(e.target.files?.[0] || null)} accept="image/*" />
+                        <Label htmlFor="bgURL">Background Image URL</Label>
+                        <Input id="bgURL" value={bgURL} onChange={(e) => setBgURL(e.target.value)} placeholder="https://example.com/image.png" />
                     </div>
                 </div>
                 <DialogFooter>
@@ -382,3 +367,4 @@ export default function ProfilePage() {
         </div>
     );
 }
+
