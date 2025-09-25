@@ -2,12 +2,6 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import { ThemeProvider } from '@/components/theme-provider';
-import Header from '@/components/layout/Header';
-import { Suspense } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
-import AuthLayout from './(auth)/layout';
-import AppLayout from './(app)/layout';
 
 export const metadata: Metadata = {
   title: 'BCHAT',

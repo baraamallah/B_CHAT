@@ -1,17 +1,15 @@
 
-
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import Image from "next/image";
-import { FileText, User, MessageCircle, Search as SearchIcon, UserPlus, CheckCircle } from "lucide-react";
+import { MessageCircle, Search as SearchIcon, UserPlus, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useState, useEffect } from "react";
-import { collection, query, where, getDocs, limit, startAt, endAt, orderBy, doc, setDoc, getDoc, serverTimestamp, or } from "firebase/firestore";
+import { collection, query, where, getDocs, limit, startAt, endAt, orderBy, doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import Link from "next/link";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
@@ -72,7 +70,9 @@ function UserResults({ users, currentUser }: { users: FoundUser[], currentUser: 
                         <AvatarImage src={user.photoURL || "https://placehold.co/100x100.png"} data-ai-hint="person portrait"/>
                         <AvatarFallback>{user.displayName.charAt(0)}</AvatarFallback>
                     </Avatar>
-                    <h3 className="font-semibold">{user.displayName}</h3>
+                    <Link href={`/profile?id=${user.uid}`}>
+                      <h3 className="font-semibold hover:underline">{user.displayName}</h3>
+                    </Link>
                      <p className="text-sm text-muted-foreground font-mono">{user.friendCode}</p>
                     <div className="flex flex-wrap gap-1 justify-center mt-4">
                         {(user.tags || []).map(tag => <Badge key={tag} variant="outline">{tag}</Badge>)}
@@ -128,7 +128,7 @@ function SearchPageContent() {
       ]);
       
       const users: FoundUser[] = [];
-      const seenUids = new Set();
+      const seenUids = new Set<string>();
       
       const processSnapshot = (snapshot: any) => {
         snapshot.forEach((doc: any) => {
@@ -186,3 +186,5 @@ export default function SearchPage() {
       </div>
     );
   }
+
+    
