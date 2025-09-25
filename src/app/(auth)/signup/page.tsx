@@ -19,11 +19,24 @@ import { auth, db } from "@/lib/firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 
+// Function to generate a random friend code
+const generateFriendCode = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let code = '';
+    for (let i = 0; i < 8; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+};
+
+
 export default function SignupPage() {
     const router = useRouter();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [fullName, setFullName] = useState('');
+    const [dob, setDob] = useState('');
+    const [phone, setPhone] = useState('');
     const [error, setError] = useState<string | null>(null);
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -32,10 +45,17 @@ export default function SignupPage() {
         try {
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
+
+            const friendCode = generateFriendCode();
+            // In a real app, you'd want to ensure this code is unique in your database.
+
             await setDoc(doc(db, "users", user.uid), {
                 uid: user.uid,
                 email: user.email,
                 displayName: fullName,
+                dob: dob,
+                phone: phone,
+                friendCode: friendCode,
                 bio: "",
                 status: "I'm new here!",
                 photoURL: "",
@@ -76,6 +96,14 @@ export default function SignupPage() {
             value={email}
             onChange={e => setEmail(e.target.value)}
           />
+        </div>
+         <div className="grid gap-2">
+            <Label htmlFor="dob">Date of Birth</Label>
+            <Input id="dob" type="date" required value={dob} onChange={e => setDob(e.target.value)} />
+        </div>
+         <div className="grid gap-2">
+            <Label htmlFor="phone">Phone Number</Label>
+            <Input id="phone" type="tel" placeholder="+1 (555) 555-5555" required value={phone} onChange={e => setPhone(e.target.value)} />
         </div>
         <div className="grid gap-2">
           <Label htmlFor="password">Password</Label>

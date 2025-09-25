@@ -4,7 +4,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Edit, LogOut, UserPlus, Check, X, Wifi, WifiOff } from "lucide-react";
+import { Edit, LogOut, UserPlus, Check, X, Wifi, WifiOff, Copy } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ import { useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
+import { useToast } from "@/hooks/use-toast";
 
 
 interface UserProfile {
@@ -33,6 +34,9 @@ interface UserProfile {
     lastActive?: any;
     online?: boolean;
     role?: 'user' | 'admin';
+    friendCode?: string;
+    dob?: string;
+    phone?: string;
 }
 
 interface FriendRequest {
@@ -233,6 +237,7 @@ export default function ProfilePage() {
     const [loading, setLoading] = useState(true);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const router = useRouter();
+    const { toast } = useToast();
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
@@ -245,7 +250,7 @@ export default function ProfilePage() {
                         setUser({uid: doc.id, ...doc.data()} as UserProfile);
                     } else {
                         // This logic handles creation of user profile if it doesn't exist
-                        const newUserProfile: UserProfile = {
+                         const newUserProfile: UserProfile = {
                             uid: fbUser.uid,
                             email: fbUser.email || "",
                             displayName: fbUser.displayName || "New User",
@@ -257,8 +262,9 @@ export default function ProfilePage() {
                             lastActive: serverTimestamp(),
                             online: true,
                             role: 'user',
+                            friendCode: 'GENERATING...'
                         };
-                        setDoc(userDocRef, newUserProfile).then(() => {
+                        setDoc(userDocRef, newUserProfile, { merge: true }).then(() => {
                             setUser(newUserProfile);
                         });
                     }
@@ -305,6 +311,13 @@ export default function ProfilePage() {
         
         return null;
     }
+    
+    const handleCopyFriendCode = () => {
+        if(user?.friendCode) {
+            navigator.clipboard.writeText(user.friendCode);
+            toast({title: "Friend code copied to clipboard!"});
+        }
+    }
 
 
     if (loading || !user || !currentUser) {
@@ -324,7 +337,10 @@ export default function ProfilePage() {
                             <AvatarFallback>{user.displayName.charAt(0)}</AvatarFallback>
                         </Avatar>
                         <div className="flex-1 text-center md:text-left mt-4 md:mt-0">
-                            <h1 className="text-2xl font-bold">{user.displayName}</h1>
+                            <div className="flex items-center justify-center md:justify-start gap-2">
+                               <h1 className="text-2xl font-bold">{user.displayName}</h1>
+                               {user.role === 'admin' && <Badge variant="destructive">Admin</Badge>}
+                            </div>
                             <p className="text-muted-foreground italic">"{user.status}"</p>
                             <div className="mt-2">
                                 {renderStatus()}
@@ -349,12 +365,30 @@ export default function ProfilePage() {
                             <CardTitle>About Me</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <p className="text-muted-foreground">
-                                {user.bio || "This user hasn't written a bio yet."}
-                            </p>
-                            <div className="mt-4 flex gap-2 items-center">
-                                <Badge variant="secondary">{user.email}</Badge>
-                                {user.role === 'admin' && <Badge variant="destructive">Admin</Badge>}
+                             <div className="space-y-4">
+                                <div>
+                                    <h3 className="font-semibold">Bio</h3>
+                                    <p className="text-muted-foreground">
+                                        {user.bio || "This user hasn't written a bio yet."}
+                                    </p>
+                                </div>
+                                <div>
+                                    <h3 className="font-semibold">Friend Code</h3>
+                                     <div className="flex items-center gap-2">
+                                        <p className="text-muted-foreground font-mono bg-muted px-2 py-1 rounded-md">{user.friendCode}</p>
+                                        <Button variant="ghost" size="icon" onClick={handleCopyFriendCode}><Copy className="h-4 w-4" /></Button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h3 className="font-semibold">Email</h3>
+                                    <p className="text-muted-foreground">{user.email}</p>
+                                </div>
+                                {user.dob && (
+                                    <div>
+                                        <h3 className="font-semibold">Birthday</h3>
+                                        <p className="text-muted-foreground">{user.dob}</p>
+                                    </div>
+                                )}
                             </div>
                         </CardContent>
                     </Card>
@@ -368,3 +402,5 @@ export default function ProfilePage() {
     );
 }
 
+
+    

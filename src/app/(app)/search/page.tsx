@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useState, useEffect } from "react";
-import { collection, query, where, getDocs, limit, startAt, endAt, orderBy, doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, getDocs, limit, startAt, endAt, orderBy, doc, setDoc, getDoc, serverTimestamp, or } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import Link from "next/link";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
@@ -22,6 +22,7 @@ interface FoundUser {
   photoURL: string;
   role: string;
   tags: string[];
+  friendCode: string;
 }
 
 function UserResults({ users, currentUser }: { users: FoundUser[], currentUser: FirebaseUser | null }) {
@@ -70,7 +71,7 @@ function UserResults({ users, currentUser }: { users: FoundUser[], currentUser: 
                         <AvatarFallback>{user.displayName.charAt(0)}</AvatarFallback>
                     </Avatar>
                     <h3 className="font-semibold">{user.displayName}</h3>
-                    <p className="text-sm text-muted-foreground">{user.role || 'BCHAT User'}</p>
+                     <p className="text-sm text-muted-foreground font-mono">{user.friendCode}</p>
                     <div className="flex flex-wrap gap-1 justify-center mt-4">
                         {(user.tags || []).map(tag => <Badge key={tag} variant="outline">{tag}</Badge>)}
                     </div>
@@ -115,17 +116,24 @@ export default function SearchPage() {
 
       const usersRef = collection(db, "users");
       const q = query(usersRef, 
-        orderBy("displayName"), 
-        startAt(searchQuery),
-        endAt(searchQuery + '\uf8ff'),
+        or(
+            where("displayName", ">=", searchQuery),
+            where("displayName", "<=", searchQuery + '\uf8ff'),
+            where("friendCode", "==", searchQuery.toUpperCase())
+        ),
         limit(20)
       );
       
       const querySnapshot = await getDocs(q);
       const users: FoundUser[] = [];
       querySnapshot.forEach((doc) => {
-        if (doc.id !== currentUser.uid) { // Exclude current user from results
-          users.push({ uid: doc.id, ...doc.data() } as FoundUser);
+        const data = doc.data();
+        // Additional client-side filtering for displayName range
+        const nameMatch = data.displayName && data.displayName.toLowerCase().startsWith(searchQuery.toLowerCase());
+        const codeMatch = data.friendCode === searchQuery.toUpperCase();
+
+        if (doc.id !== currentUser.uid && (nameMatch || codeMatch)) { 
+          users.push({ uid: doc.id, ...data } as FoundUser);
         }
       });
       setUserResults(users);
@@ -138,7 +146,7 @@ export default function SearchPage() {
       <form onSubmit={handleSearch} className="flex gap-2">
         <Input 
           type="search" 
-          placeholder="Search for users by name..." 
+          placeholder="Search by name or friend code..." 
           className="flex-grow"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -161,5 +169,3 @@ export default function SearchPage() {
     </div>
   );
 }
-
-    
