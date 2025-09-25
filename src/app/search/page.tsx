@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -15,6 +16,7 @@ import { db, auth } from "@/lib/firebase";
 import Link from "next/link";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
+import Header from "@/components/layout/Header";
 
 interface FoundUser {
   uid: string;
@@ -95,7 +97,7 @@ function UserResults({ users, currentUser }: { users: FoundUser[], currentUser: 
   )
 }
 
-export default function SearchPage() {
+function SearchPageContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const [userResults, setUserResults] = useState<FoundUser[]>([]);
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
@@ -144,7 +146,7 @@ export default function SearchPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       <h1 className="text-3xl font-bold">Search</h1>
       
       <form onSubmit={handleSearch} className="flex gap-2">
@@ -173,3 +175,14 @@ export default function SearchPage() {
     </div>
   );
 }
+
+export default function SearchPage() {
+    return (
+      <div className="flex flex-col min-h-screen">
+        <Header/>
+        <main className="flex-1">
+          <SearchPageContent />
+        </main>
+      </div>
+    );
+  }

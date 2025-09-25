@@ -3,6 +3,7 @@ import { Suspense } from 'react';
 import MessagesClientPage from './MessagesClientPage';
 import { Card, CardContent } from '@/components/ui/card';
 import { MessageSquare } from 'lucide-react';
+import Header from '@/components/layout/Header';
 
 function MessagesLoading() {
     return (
@@ -24,10 +25,24 @@ function MessagesLoading() {
     )
 }
 
+function MessagesPageContent() {
+    return (
+        <div className="p-4 sm:p-6 lg:p-8">
+            <Suspense fallback={<MessagesLoading />}>
+                <MessagesClientPage />
+            </Suspense>
+        </div>
+    )
+}
+
+
 export default function MessagesPage() {
   return (
-    <Suspense fallback={<MessagesLoading />}>
-      <MessagesClientPage />
-    </Suspense>
+    <div className="flex flex-col min-h-screen">
+        <Header/>
+        <main className="flex-1">
+            <MessagesPageContent />
+        </main>
+    </div>
   );
 }

@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -23,6 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import Linkify from "react-linkify";
+import Header from "@/components/layout/Header";
 
 interface UserProfile {
     uid: string;
@@ -380,7 +382,7 @@ function FriendsTab({ currentUser, friendIds, profileIsPrivate }: { currentUser:
 }
 
 
-export default function ProfilePage() {
+function ProfilePageContent() {
     const [user, setUser] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -443,7 +445,6 @@ export default function ProfilePage() {
 
             } else {
                 router.push("/");
-                setLoading(false);
             }
         });
 
@@ -495,7 +496,7 @@ export default function ProfilePage() {
 
     if (loading || !profileUser || !currentUser) {
         return (
-            <div className="space-y-6">
+            <div className="p-4 sm:p-6 lg:p-8 space-y-6">
                 <Card className="mb-8 overflow-hidden">
                     <Skeleton className="h-48 w-full" />
                     <CardContent className="p-6">
@@ -534,7 +535,7 @@ export default function ProfilePage() {
 
     if (isPrivateAndNotFriend) {
         return (
-             <div className="space-y-6">
+             <div className="p-4 sm:p-6 lg:p-8 space-y-6">
                 <Card className="mb-8 overflow-hidden">
                     <div style={{ backgroundImage: `url(${profileUser.bgURL || 'https://placehold.co/1200x300.png'})`, backgroundSize: 'cover', backgroundPosition: 'center' }} className="h-48 w-full bg-muted blur-sm" data-ai-hint="abstract background"></div>
                     <CardContent className="p-6">
@@ -561,7 +562,7 @@ export default function ProfilePage() {
     const friendIds = profileUser.friends || [];
 
     return (
-        <div className="space-y-6">
+        <div className="p-4 sm:p-6 lg:p-8 space-y-6">
             <Card className="mb-8 overflow-hidden">
                 <div style={{ backgroundImage: `url(${profileUser.bgURL || 'https://placehold.co/1200x300.png'})`, backgroundSize: 'cover', backgroundPosition: 'center' }} className="h-48 w-full bg-muted" data-ai-hint="abstract background"></div>
                 <CardContent className="p-6">
@@ -650,5 +651,17 @@ export default function ProfilePage() {
 
         </div>
     );
+}
+
+
+export default function ProfilePage() {
+    return (
+        <div className="flex flex-col min-h-screen">
+          <Header/>
+          <main className="flex-1">
+             <ProfilePageContent />
+          </main>
+        </div>
+      );
 }
 

@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { Button } from "@/components/ui/button";
@@ -24,11 +25,14 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         router.push("/profile");
+      } else {
+        setLoading(false);
       }
     });
     return () => unsubscribe();
@@ -44,6 +48,14 @@ export default function LoginPage() {
       setError(err.message);
     }
   };
+
+  if (loading) {
+    return (
+        <div className="flex flex-col items-center justify-center min-h-screen bg-muted/50 p-4">
+            <Logo className="h-12 w-12 text-primary animate-pulse" />
+        </div>
+    )
+  }
 
   return (
     <main className="flex flex-col items-center justify-center min-h-screen bg-muted/50 p-4">
