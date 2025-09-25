@@ -53,6 +53,17 @@ interface Friend {
     photoURL: string;
 }
 
+// Function to generate a random friend code
+const generateFriendCode = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let code = '';
+    for (let i = 0; i < 8; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+};
+
+
 function EditProfileDialog({ user, onUpdate }: { user: UserProfile, onUpdate: (data: Partial<UserProfile>) => void }) {
     const [displayName, setDisplayName] = useState(user.displayName);
     const [bio, setBio] = useState(user.bio);
@@ -262,7 +273,7 @@ export default function ProfilePage() {
                             lastActive: serverTimestamp(),
                             online: true,
                             role: 'user',
-                            friendCode: 'GENERATING...'
+                            friendCode: generateFriendCode()
                         };
                         setDoc(userDocRef, newUserProfile, { merge: true }).then(() => {
                             setUser(newUserProfile);
@@ -403,4 +414,5 @@ export default function ProfilePage() {
 }
 
 
+    
     
