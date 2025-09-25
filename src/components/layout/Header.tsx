@@ -1,7 +1,7 @@
 
 'use client';
 
-import { LogOut, Menu, Search, Moon, Sun } from 'lucide-react';
+import { LogOut, Search, Moon, Sun, User, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -15,11 +15,12 @@ import {
 import Link from 'next/link';
 import { auth } from '@/lib/firebase';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { useSidebar } from '../ui/sidebar';
 import { Input } from '../ui/input';
 import { useTheme } from "next-themes";
+import { Logo } from '@/components/icons/Logo';
+import { cn } from '@/lib/utils';
 
 
 function ThemeToggle() {
@@ -38,11 +39,17 @@ function ThemeToggle() {
   )
 }
 
+const navItems = [
+  { href: '/profile', icon: User, label: 'Profile' },
+  { href: '/messages', icon: MessageSquare, label: 'Messages' },
+  { href: '/search', icon: Search, label: 'Search' },
+];
+
 
 export default function Header() {
     const router = useRouter();
+    const pathname = usePathname();
     const [user, setUser] = useState<any>(null);
-    const { toggleSidebar } = useSidebar();
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -57,37 +64,55 @@ export default function Header() {
     };
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
-        <Button size="icon" variant="outline" className="sm:hidden" onClick={toggleSidebar}>
-            <Menu className="h-5 w-5" />
-            <span className="sr-only">Toggle Menu</span>
-        </Button>
-        <div className="relative ml-auto flex-1 md:grow-0">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search..."
-              className="w-full rounded-lg bg-background pl-8 md:w-[200px] lg:w-[320px]"
-            />
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
+       <Link href="/profile" className="flex items-center gap-2 font-semibold mr-6" prefetch={false}>
+          <Logo className="h-7 w-7 text-primary" />
+          <span className="text-xl font-semibold hidden md:inline-block">BCHAT</span>
+        </Link>
+        <nav className="hidden flex-col gap-6 text-lg font-medium md:flex md:flex-row md:items-center md:gap-5 md:text-sm lg:gap-6">
+             {navItems.map((item) => {
+                const isActive = pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn("transition-colors hover:text-foreground", isActive ? "text-foreground" : "text-muted-foreground")}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+        </nav>
+        <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
+            <form className="ml-auto flex-1 sm:flex-initial">
+                 <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="search"
+                      placeholder="Search..."
+                      className="w-full rounded-lg bg-background pl-8 md:w-[200px] lg:w-[320px]"
+                    />
+                </div>
+            </form>
+            <ThemeToggle />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="overflow-hidden rounded-full">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={user?.photoURL || "https://placehold.co/100x100.png"} alt="user avatar" data-ai-hint="person" />
+                    <AvatarFallback>{user?.displayName?.charAt(0) || 'U'}</AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild><Link href="/profile">Profile</Link></DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout}><LogOut className="mr-2 h-4 w-4" />Logout</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
         </div>
-        <ThemeToggle />
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon" className="overflow-hidden rounded-full">
-              <Avatar className="h-8 w-8">
-                <AvatarImage src={user?.photoURL || "https://placehold.co/100x100.png"} alt="user avatar" data-ai-hint="person" />
-                <AvatarFallback>{user?.displayName?.charAt(0) || 'U'}</AvatarFallback>
-              </Avatar>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>My Account</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild><Link href="/profile">Profile</Link></DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout}><LogOut className="mr-2 h-4 w-4" />Logout</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
     </header>
   );
 }
