@@ -258,7 +258,14 @@ export default function ProfilePage() {
                 
                 const unsub = onSnapshot(userDocRef, (doc) => {
                     if (doc.exists()) {
-                        setUser({uid: doc.id, ...doc.data()} as UserProfile);
+                        const userData = doc.data();
+                        if(!userData.friendCode) {
+                            const friendCode = generateFriendCode();
+                            updateDoc(userDocRef, {friendCode});
+                            setUser({uid: doc.id, ...userData, friendCode } as UserProfile);
+                        } else {
+                            setUser({uid: doc.id, ...userData} as UserProfile);
+                        }
                     } else {
                         // This logic handles creation of user profile if it doesn't exist
                          const newUserProfile: UserProfile = {
@@ -386,7 +393,7 @@ export default function ProfilePage() {
                                 <div>
                                     <h3 className="font-semibold">Friend Code</h3>
                                      <div className="flex items-center gap-2">
-                                        <p className="text-muted-foreground font-mono bg-muted px-2 py-1 rounded-md">{user.friendCode}</p>
+                                        <p className="text-muted-foreground font-mono bg-muted px-2 py-1 rounded-md">{user.friendCode || 'No code'}</p>
                                         <Button variant="ghost" size="icon" onClick={handleCopyFriendCode}><Copy className="h-4 w-4" /></Button>
                                     </div>
                                 </div>
